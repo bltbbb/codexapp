@@ -1,0 +1,12 @@
+{
+  "name": "telegram-codex-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "node-pty": "^1.1.0-beta34"
+  }
+}
