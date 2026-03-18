@@ -63,7 +63,7 @@ if ($PhotoPath -or $DocumentPath) {
   }
 
   $params.ContentType = 'application/json; charset=utf-8'
-  $params.Body = $json
+  $params.Body = [System.Text.Encoding]::UTF8.GetBytes($json)
 
   try {
     $bodyHash = $json | ConvertFrom-Json -AsHashtable

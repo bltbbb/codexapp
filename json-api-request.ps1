@@ -27,7 +27,7 @@ $params = @{
   Uri = $Url
   Method = 'Post'
   ContentType = 'application/json; charset=utf-8'
-  Body = $json
+  Body = [System.Text.Encoding]::UTF8.GetBytes($json)
   Headers = $headers
   TimeoutSec = $TimeoutSec
 }
