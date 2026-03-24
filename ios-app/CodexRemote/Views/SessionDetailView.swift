@@ -200,7 +200,7 @@ struct SessionDetailView: View {
     .padding(.horizontal, 16)
     .padding(.top, 12)
     .padding(.bottom, 12)
-    .onChange(of: selectedPhotoItems) { _, newItems in
+    .onChange(of: selectedPhotoItems) { newItems in
       let captured = newItems
       selectedPhotoItems = []
       Task {
@@ -482,7 +482,7 @@ private struct ArtifactPreviewSheet: View {
         } else if target.kind == "text" {
           textPreviewView
         } else {
-          ContentUnavailableView(
+          UnavailableStateView(
             "暂不支持预览",
             systemImage: "doc",
             description: Text("当前文件类型会继续使用系统外部打开。")
@@ -532,7 +532,7 @@ private struct ArtifactPreviewSheet: View {
         }
       }
     } else if !previewError.isEmpty {
-      ContentUnavailableView(
+      UnavailableStateView(
         "图片预览失败",
         systemImage: "photo",
         description: Text(previewError)
@@ -565,7 +565,7 @@ private struct ArtifactPreviewSheet: View {
       }
       .background(Color(uiColor: .systemGroupedBackground))
     } else {
-      ContentUnavailableView(
+      UnavailableStateView(
         "文本预览失败",
         systemImage: "doc.plaintext",
         description: Text(previewError.isEmpty ? "没有拿到预览内容。" : previewError)

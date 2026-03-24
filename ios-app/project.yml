@@ -7,12 +7,12 @@ configs:
 settings:
   base:
     SWIFT_VERSION: 5.0
-    IPHONEOS_DEPLOYMENT_TARGET: 17.0
+    IPHONEOS_DEPLOYMENT_TARGET: 16.0
 targets:
   CodexRemote:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "16.0"
     sources:
       - path: CodexRemote
     settings:

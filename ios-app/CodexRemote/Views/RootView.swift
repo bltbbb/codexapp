@@ -15,7 +15,7 @@ struct RootView: View {
     NavigationStack(path: $path) {
       Group {
         if !settings.canRequestServer {
-          ContentUnavailableView(
+          UnavailableStateView(
             "先配置服务器",
             systemImage: "server.rack",
             description: Text("先在右上角设置里填写 Tailscale 地址和访问令牌。")
