@@ -1,3 +1,9 @@
 node_modules/
 runtime/
 .env
+ios-app/build/
+ios-app/*.xcodeproj/
+ios-app/*.xcworkspace/
+*.xcarchive
+*.ipa
+DerivedData/

@@ -1,0 +1,78 @@
+name: Build Unsigned iOS IPA
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    env:
+      IOS_PROJECT_DIR: ios-app
+      IOS_PROJECT_NAME: CodexRemote
+      IOS_SCHEME: CodexRemote
+      IOS_APP_NAME: CodexRemote
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 选择 Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: 安装 XcodeGen
+        shell: bash
+        run: brew install xcodegen
+
+      - name: 生成 Xcode 工程
+        shell: bash
+        run: |
+          cd "$IOS_PROJECT_DIR"
+          xcodegen generate
+
+      - name: 编译 unsigned iOS App
+        shell: bash
+        run: |
+          xcodebuild \
+            -project "$IOS_PROJECT_DIR/$IOS_PROJECT_NAME.xcodeproj" \
+            -scheme "$IOS_SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: 封装 unsigned IPA
+        shell: bash
+        run: |
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/$IOS_APP_NAME.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "未找到编译产物: $APP_PATH"
+            exit 1
+          fi
+
+          PACKAGE_DIR="$RUNNER_TEMP/unsigned-ipa"
+          PAYLOAD_DIR="$PACKAGE_DIR/Payload"
+          mkdir -p "$PAYLOAD_DIR"
+          cp -R "$APP_PATH" "$PAYLOAD_DIR/$IOS_APP_NAME.app"
+
+          cd "$PACKAGE_DIR"
+          /usr/bin/zip -qry "$RUNNER_TEMP/$IOS_APP_NAME-unsigned.ipa" Payload
+
+      - name: 上传 unsigned IPA 制品
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexRemote-unsigned-ipa
+          path: |
+            ${{ runner.temp }}/CodexRemote-unsigned.ipa
+            ${{ runner.temp }}/DerivedData/Build/Products/Release-iphoneos/CodexRemote.app
