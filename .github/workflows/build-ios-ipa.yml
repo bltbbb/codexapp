@@ -68,6 +68,47 @@ jobs:
           tail -n 200 "$RUNNER_TEMP/xcodebuild.log" || true
           echo "===== end ====="
 
+      - name: 提取编译错误摘要
+        if: failure()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib
+
+          log_path = pathlib.Path(r"${RUNNER_TEMP}/xcodebuild.log")
+          if not log_path.exists():
+              print("xcodebuild.log 不存在")
+              raise SystemExit(0)
+
+          lines = log_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+          error_indexes = [
+              index for index, line in enumerate(lines)
+              if " error: " in line or line.strip().startswith("error:")
+          ]
+
+          if not error_indexes:
+              print("未在日志中找到带 error: 的行")
+              raise SystemExit(0)
+
+          print("===== extracted compile errors =====")
+          printed = 0
+          seen = set()
+          for index in error_indexes:
+              start = max(0, index - 4)
+              end = min(len(lines), index + 8)
+              block_key = (start, end)
+              if block_key in seen:
+                  continue
+              seen.add(block_key)
+              print(f"----- block {printed + 1} -----")
+              for line_no in range(start, end):
+                  print(f"{line_no + 1}: {lines[line_no]}")
+              printed += 1
+              if printed >= 12:
+                  break
+          print("===== end extracted compile errors =====")
+          PY
+
       - name: 封装 unsigned IPA
         shell: bash
         run: |
