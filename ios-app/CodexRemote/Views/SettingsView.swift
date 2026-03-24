@@ -73,7 +73,7 @@ struct SettingsView: View {
                 Spacer()
                 Text(device.pushEnabled ? "已启用" : "已关闭")
                   .font(.caption.weight(.semibold))
-                  .foregroundStyle(device.pushEnabled ? .green : .secondary)
+                  .foregroundStyle(deviceStatusColor(device))
               }
 
               if let tokenMasked = device.tokenMasked, !tokenMasked.isEmpty {
@@ -131,5 +131,9 @@ struct SettingsView: View {
     @unknown default:
       return "未知"
     }
+  }
+
+  private func deviceStatusColor(_ device: PushDevice) -> Color {
+    device.pushEnabled ? .green : .secondary
   }
 }
