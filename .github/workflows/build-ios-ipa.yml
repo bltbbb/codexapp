@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-ipa:
@@ -143,3 +143,171 @@ jobs:
           path: |
             ${{ runner.temp }}/xcodebuild.log
             ${{ runner.temp }}/CodexRemote.xcresult
+
+      - name: 生成静态错误报告
+        if: failure()
+        shell: bash
+        run: |
+          REPORT_ROOT="$RUNNER_TEMP/pages-report"
+          REPORT_RUN_DIR="$REPORT_ROOT/reports/${GITHUB_RUN_ID}"
+          REPORT_LATEST_DIR="$REPORT_ROOT/reports/latest"
+          mkdir -p "$REPORT_RUN_DIR" "$REPORT_LATEST_DIR"
+
+          python3 - <<'PY'
+          import html
+          import os
+          import pathlib
+          import re
+
+          report_run_dir = pathlib.Path(os.environ["REPORT_RUN_DIR"])
+          report_latest_dir = pathlib.Path(os.environ["REPORT_LATEST_DIR"])
+          log_path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "xcodebuild.log"
+
+          raw_log = ""
+          if log_path.exists():
+              raw_log = log_path.read_text(encoding="utf-8", errors="ignore")
+
+          lines = raw_log.splitlines()
+          error_indexes = [
+              index for index, line in enumerate(lines)
+              if " error: " in line or line.strip().startswith("error:")
+          ]
+
+          blocks = []
+          seen = set()
+          for index in error_indexes[:20]:
+              start = max(0, index - 4)
+              end = min(len(lines), index + 8)
+              key = (start, end)
+              if key in seen:
+                  continue
+              seen.add(key)
+              block = "\n".join(f"{line_no + 1}: {lines[line_no]}" for line_no in range(start, end))
+              blocks.append(block)
+
+          summary_items = []
+          if blocks:
+              for idx, block in enumerate(blocks, start=1):
+                  summary_items.append(
+                      f"<section><h2>错误块 {idx}</h2><pre>{html.escape(block)}</pre></section>"
+                  )
+          else:
+              summary_items.append("<p>未提取到带 error: 的行，请查看完整日志。</p>")
+
+          owner = os.environ.get("GITHUB_REPOSITORY_OWNER", "")
+          repo = os.environ.get("GITHUB_REPOSITORY", "").split("/")[-1]
+          run_id = os.environ.get("GITHUB_RUN_ID", "")
+          sha = os.environ.get("GITHUB_SHA", "")
+          workflow = os.environ.get("GITHUB_WORKFLOW", "")
+          server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+          run_url = f"{server_url}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{run_id}"
+          pages_url = f"https://{owner}.github.io/{repo}/reports/{run_id}/"
+
+          html_body = f"""<!doctype html>
+          <html lang="zh-CN">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>CodexRemote 构建错误报告 #{run_id}</title>
+            <style>
+              :root {{
+                --bg: #0f1115;
+                --panel: #171a21;
+                --text: #eef2ff;
+                --muted: #9aa4bf;
+                --line: #2b3140;
+                --accent: #ff8a3d;
+                --danger: #ff6b6b;
+              }}
+              * {{ box-sizing: border-box; }}
+              body {{
+                margin: 0;
+                background: var(--bg);
+                color: var(--text);
+                font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+              }}
+              main {{
+                width: min(1100px, calc(100vw - 32px));
+                margin: 0 auto;
+                padding: 32px 0 64px;
+              }}
+              h1, h2 {{ margin: 0 0 12px; }}
+              .hero, section {{
+                background: var(--panel);
+                border: 1px solid var(--line);
+                border-radius: 18px;
+                padding: 20px;
+                margin-bottom: 18px;
+              }}
+              .meta {{
+                display: grid;
+                gap: 6px;
+                color: var(--muted);
+                margin-top: 12px;
+              }}
+              a {{ color: var(--accent); }}
+              pre {{
+                margin: 0;
+                padding: 16px;
+                border-radius: 14px;
+                background: #10131a;
+                border: 1px solid var(--line);
+                color: #ffe7d6;
+                overflow: auto;
+                white-space: pre-wrap;
+                word-break: break-word;
+                font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+              }}
+              .danger {{ color: var(--danger); }}
+              details {{
+                margin-top: 16px;
+              }}
+              summary {{
+                cursor: pointer;
+                color: var(--accent);
+              }}
+            </style>
+          </head>
+          <body>
+            <main>
+              <section class="hero">
+                <h1>CodexRemote 构建错误报告</h1>
+                <p class="danger">当前这次 unsigned IPA 构建失败，下面是自动提取的错误上下文。</p>
+                <div class="meta">
+                  <div>Workflow: {html.escape(workflow)}</div>
+                  <div>Run ID: {html.escape(run_id)}</div>
+                  <div>Commit: {html.escape(sha[:12])}</div>
+                  <div>Actions 页面: <a href="{html.escape(run_url)}">{html.escape(run_url)}</a></div>
+                  <div>公开报告链接: <a href="{html.escape(pages_url)}">{html.escape(pages_url)}</a></div>
+                </div>
+              </section>
+              {''.join(summary_items)}
+              <section>
+                <h2>完整日志</h2>
+                <details>
+                  <summary>展开 xcodebuild.log</summary>
+                  <pre>{html.escape(raw_log or '未找到 xcodebuild.log')}</pre>
+                </details>
+              </section>
+            </main>
+          </body>
+          </html>
+          """
+
+          (report_run_dir / "index.html").write_text(html_body, encoding="utf-8")
+          (report_latest_dir / "index.html").write_text(html_body, encoding="utf-8")
+          (pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"])).write_text(
+              f"公开错误报告：{pages_url}\n",
+              encoding="utf-8"
+          )
+          print(f"Pages report generated: {pages_url}")
+          PY
+
+      - name: 发布错误报告到 gh-pages
+        if: failure()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ${{ runner.temp }}/pages-report
+          keep_files: true

@@ -48,12 +48,19 @@ ios-app/CodexRemote.xcodeproj
 2. 不需要描述文件
 3. 直接编译 `iphoneos` 产物
 4. 手工封装成 `unsigned IPA`
+5. 构建失败时自动生成静态 HTML 错误报告并推到 `gh-pages`
 
 适合：
 
 1. 越狱设备
 2. 已安装 `AppSync Unified` 一类工具的设备
 3. 你自己后续再本地重签名的场景
+
+公开错误报告链接格式：
+
+```text
+https://bltbbb.github.io/codexapp/reports/<run_id>/
+```
 
 如果你要改 App 名称或 Bundle ID，请同步改：
 
