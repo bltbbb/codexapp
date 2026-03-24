@@ -200,11 +200,11 @@ struct SessionDetailView: View {
     .padding(.horizontal, 16)
     .padding(.top, 12)
     .padding(.bottom, 12)
-    .onChange(of: selectedPhotoItems) { items in
-      let captured = items
+    .onChange(of: selectedPhotoItems) { _, newItems in
+      let captured = newItems
       selectedPhotoItems = []
       Task {
-        await model.addPhotoAttachments(captured)
+        await loadPhotoAttachments(captured)
       }
     }
     .fileImporter(
@@ -220,6 +220,36 @@ struct SessionDetailView: View {
       case let .failure(error):
         model.errorMessage = error.localizedDescription
       }
+    }
+  }
+
+  private func loadPhotoAttachments(_ items: [PhotosPickerItem]) async {
+    guard !items.isEmpty else {
+      return
+    }
+
+    var prepared: [PreparedAttachmentInput] = []
+    do {
+      for (index, item) in items.enumerated() {
+        guard let data = try await item.loadTransferable(type: Data.self) else {
+          continue
+        }
+
+        let mimeType = item.supportedContentTypes.first?.preferredMIMEType ?? "image/jpeg"
+        let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
+        let name = "photo-\(Int(Date().timeIntervalSince1970))-\(index + 1).\(fileExtension)"
+        prepared.append(
+          PreparedAttachmentInput(
+            name: name,
+            data: data,
+            mimeType: mimeType
+          )
+        )
+      }
+
+      model.addPreparedAttachments(prepared)
+    } catch {
+      model.errorMessage = error.localizedDescription
     }
   }
 

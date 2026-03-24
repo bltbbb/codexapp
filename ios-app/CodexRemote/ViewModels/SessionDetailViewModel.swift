@@ -1,5 +1,4 @@
 import Foundation
-import PhotosUI
 import UniformTypeIdentifiers
 
 @MainActor
@@ -221,29 +220,6 @@ final class SessionDetailViewModel: ObservableObject {
     pendingAttachments.removeAll { $0.id == attachment.id }
   }
 
-  func addPhotoAttachments(_ items: [PhotosPickerItem]) async {
-    guard !items.isEmpty else {
-      return
-    }
-
-    do {
-      var drafts: [DraftAttachment] = []
-      for (index, item) in items.enumerated() {
-        guard let data = try await item.loadTransferable(type: Data.self) else {
-          continue
-        }
-
-        let mimeType = item.supportedContentTypes.first?.preferredMIMEType ?? "image/jpeg"
-        let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
-        let name = "photo-\(Int(Date().timeIntervalSince1970))-\(index + 1).\(fileExtension)"
-        drafts.append(try buildDraftAttachment(name: name, data: data, mimeType: mimeType))
-      }
-      try appendAttachments(drafts)
-    } catch {
-      errorMessage = error.localizedDescription
-    }
-  }
-
   func addFileAttachments(urls: [URL]) async {
     guard !urls.isEmpty else {
       return
@@ -262,6 +238,21 @@ final class SessionDetailViewModel: ObservableObject {
         let data = try Data(contentsOf: url)
         let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
         drafts.append(try buildDraftAttachment(name: url.lastPathComponent, data: data, mimeType: mimeType))
+      }
+      try appendAttachments(drafts)
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  func addPreparedAttachments(_ attachments: [PreparedAttachmentInput]) {
+    do {
+      let drafts = try attachments.map { input in
+        try buildDraftAttachment(
+          name: input.name,
+          data: input.data,
+          mimeType: input.mimeType
+        )
       }
       try appendAttachments(drafts)
     } catch {
@@ -372,4 +363,10 @@ final class SessionDetailViewModel: ObservableObject {
     }
     return "file"
   }
+}
+
+struct PreparedAttachmentInput {
+  let name: String
+  let data: Data
+  let mimeType: String
 }
