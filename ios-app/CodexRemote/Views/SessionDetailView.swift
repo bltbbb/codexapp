@@ -493,7 +493,7 @@ private struct ArtifactPreviewSheet: View {
               Text(error.localizedDescription)
                 .multilineTextAlignment(.center)
             }
-            .foregroundStyle(.white)
+            .foregroundColor(.white)
             .padding(24)
           default:
             ProgressView("正在加载图片…")
