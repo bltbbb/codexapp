@@ -147,10 +147,11 @@ jobs:
       - name: 生成静态错误报告
         if: failure()
         shell: bash
+        env:
+          REPORT_ROOT: ${{ runner.temp }}/pages-report
+          REPORT_RUN_DIR: ${{ runner.temp }}/pages-report/reports/${{ github.run_id }}
+          REPORT_LATEST_DIR: ${{ runner.temp }}/pages-report/reports/latest
         run: |
-          REPORT_ROOT="$RUNNER_TEMP/pages-report"
-          REPORT_RUN_DIR="$REPORT_ROOT/reports/${GITHUB_RUN_ID}"
-          REPORT_LATEST_DIR="$REPORT_ROOT/reports/latest"
           mkdir -p "$REPORT_RUN_DIR" "$REPORT_LATEST_DIR"
 
           python3 - <<'PY'
