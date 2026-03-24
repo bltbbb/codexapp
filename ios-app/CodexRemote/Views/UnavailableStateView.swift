@@ -8,6 +8,16 @@ struct UnavailableStateView<Description: View>: View {
   init(
     _ title: LocalizedStringKey,
     systemImage: String,
+    description: Description
+  ) {
+    self.title = title
+    self.systemImage = systemImage
+    self.description = description
+  }
+
+  init(
+    _ title: LocalizedStringKey,
+    systemImage: String,
     @ViewBuilder description: () -> Description
   ) {
     self.title = title
