@@ -586,10 +586,10 @@ private struct MessageBubble: View {
     VStack(alignment: .leading, spacing: 6) {
       Text(message.role == "assistant" ? "Codex" : "你")
         .font(.caption.weight(.semibold))
-        .foregroundStyle(message.role == "assistant" ? .secondary : .white.opacity(0.86))
+        .foregroundStyle(titleColor)
       Text(message.text)
         .font(.body)
-        .foregroundStyle(message.role == "assistant" ? .primary : .white)
+        .foregroundStyle(bodyColor)
 
       if !message.attachments.isEmpty {
         VStack(alignment: .leading, spacing: 6) {
@@ -605,13 +605,13 @@ private struct MessageBubble: View {
                     .lineLimit(1)
                   Text(formatBytes(attachment.size ?? 0))
                     .font(.caption2)
-                    .foregroundStyle(message.role == "assistant" ? .secondary : .white.opacity(0.72))
+                    .foregroundStyle(metaColor)
                 }
                 Spacer(minLength: 0)
               }
               .padding(.horizontal, 10)
               .padding(.vertical, 8)
-              .background(message.role == "assistant" ? Color(.tertiarySystemBackground) : Color.white.opacity(0.14))
+              .background(attachmentBackgroundColor)
               .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -621,10 +621,30 @@ private struct MessageBubble: View {
 
       Text(message.createdAt)
         .font(.caption2)
-        .foregroundStyle(message.role == "assistant" ? .secondary : .white.opacity(0.72))
+        .foregroundStyle(metaColor)
     }
     .padding(12)
-    .background(message.role == "assistant" ? Color(.secondarySystemBackground) : Color.orange.gradient)
+    .background(bubbleBackgroundColor)
     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+  }
+
+  private var titleColor: Color {
+    message.role == "assistant" ? .secondary : .white.opacity(0.86)
+  }
+
+  private var bodyColor: Color {
+    message.role == "assistant" ? .primary : .white
+  }
+
+  private var metaColor: Color {
+    message.role == "assistant" ? .secondary : .white.opacity(0.72)
+  }
+
+  private var attachmentBackgroundColor: Color {
+    message.role == "assistant" ? Color(.tertiarySystemBackground) : Color.white.opacity(0.14)
+  }
+
+  private var bubbleBackgroundColor: Color {
+    message.role == "assistant" ? Color(.secondarySystemBackground) : .orange
   }
 }
