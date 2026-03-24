@@ -41,6 +41,9 @@ jobs:
       - name: 编译 unsigned iOS App
         shell: bash
         run: |
+          LOG_PATH="$RUNNER_TEMP/xcodebuild.log"
+          RESULT_BUNDLE_PATH="$RUNNER_TEMP/CodexRemote.xcresult"
+          : > "$LOG_PATH"
           set -o pipefail
           xcodebuild \
             -project "$IOS_PROJECT_DIR/$IOS_PROJECT_NAME.xcodeproj" \
@@ -48,13 +51,22 @@ jobs:
             -configuration Release \
             -destination "generic/platform=iOS" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath "$RESULT_BUNDLE_PATH" \
             CODE_SIGN_STYLE=Automatic \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_ENTITLEMENTS="" \
             ENTITLEMENTS_REQUIRED=NO \
-            build | tee "$RUNNER_TEMP/xcodebuild.log"
+            build 2>&1 | tee "$LOG_PATH"
+
+      - name: 输出失败日志尾部
+        if: failure()
+        shell: bash
+        run: |
+          echo "===== xcodebuild.log tail ====="
+          tail -n 200 "$RUNNER_TEMP/xcodebuild.log" || true
+          echo "===== end ====="
 
       - name: 封装 unsigned IPA
         shell: bash
@@ -81,4 +93,12 @@ jobs:
           path: |
             ${{ runner.temp }}/CodexRemote-unsigned.ipa
             ${{ runner.temp }}/DerivedData/Build/Products/Release-iphoneos/CodexRemote.app
+
+      - name: 上传构建日志
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: CodexRemote-build-log
+          path: |
             ${{ runner.temp }}/xcodebuild.log
+            ${{ runner.temp }}/CodexRemote.xcresult
