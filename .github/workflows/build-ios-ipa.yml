@@ -41,16 +41,20 @@ jobs:
       - name: 编译 unsigned iOS App
         shell: bash
         run: |
+          set -o pipefail
           xcodebuild \
             -project "$IOS_PROJECT_DIR/$IOS_PROJECT_NAME.xcodeproj" \
             -scheme "$IOS_SCHEME" \
             -configuration Release \
-            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGN_STYLE=Automatic \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build
+            CODE_SIGN_ENTITLEMENTS="" \
+            ENTITLEMENTS_REQUIRED=NO \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
 
       - name: 封装 unsigned IPA
         shell: bash
@@ -71,8 +75,10 @@ jobs:
 
       - name: 上传 unsigned IPA 制品
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: CodexRemote-unsigned-ipa
           path: |
             ${{ runner.temp }}/CodexRemote-unsigned.ipa
             ${{ runner.temp }}/DerivedData/Build/Products/Release-iphoneos/CodexRemote.app
+            ${{ runner.temp }}/xcodebuild.log

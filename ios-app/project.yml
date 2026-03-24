@@ -34,8 +34,7 @@ targets:
           - UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UIUserInterfaceStyle: Light
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_ENTITLEMENTS: CodexRemote/CodexRemote.entitlements
+        CODE_SIGN_STYLE: Automatic
 schemes:
   CodexRemote:
     build:

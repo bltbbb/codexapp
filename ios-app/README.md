@@ -69,3 +69,4 @@ ios-app/CodexRemote.xcodeproj
 1. 无证书打包不等于有合法推送 entitlement
 2. APNs 在 unsigned / 非正规签名安装场景下通常不稳定，甚至可能不可用
 3. 如果你后面发现本地通知没问题、远程推送不稳定，这通常不是客户端代码逻辑问题，而是签名和 entitlement 问题
+4. 当前 workflow 会一并上传 `xcodebuild.log`，便于定位无签名编译失败原因
