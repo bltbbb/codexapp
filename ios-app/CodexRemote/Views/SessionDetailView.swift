@@ -1,6 +1,7 @@
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 struct SessionDetailView: View {
   @EnvironmentObject private var settings: AppSettingsStore
@@ -35,7 +36,7 @@ struct SessionDetailView: View {
     .safeAreaInset(edge: .bottom) {
       if selectedTab == "messages" {
         composer
-          .background(.ultraThinMaterial)
+          .background(Color(uiColor: .systemBackground).opacity(0.96))
       }
     }
     .navigationTitle(model.session?.title ?? "会话")
@@ -96,22 +97,22 @@ struct SessionDetailView: View {
     VStack(alignment: .leading, spacing: 8) {
       Text(model.session?.preview.isEmpty == false ? model.session?.preview ?? "" : "会话已连接到远端 Codex 服务")
         .font(.subheadline)
-        .foregroundStyle(.secondary)
+        .foregroundColor(.secondary)
         .lineLimit(2)
 
       HStack(spacing: 10) {
         Label(streamText, systemImage: streamIcon)
           .font(.caption.weight(.semibold))
-          .foregroundStyle(streamColor)
+          .foregroundColor(streamColor)
 
         Text(statusText)
           .font(.caption)
-          .foregroundStyle(.secondary)
+          .foregroundColor(.secondary)
 
         if model.streamState == "reconnecting" {
           Text("第 \(max(model.reconnectAttempt, 1)) 次重连")
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundColor(.secondary)
         }
 
         Spacer()
@@ -120,7 +121,7 @@ struct SessionDetailView: View {
     .padding(.horizontal, 16)
     .padding(.top, 14)
     .padding(.bottom, 12)
-    .background(Color(.secondarySystemBackground))
+    .background(Color(uiColor: .secondarySystemBackground))
   }
 
   private var composer: some View {
@@ -131,26 +132,26 @@ struct SessionDetailView: View {
             ForEach(model.pendingAttachments) { attachment in
               HStack(spacing: 8) {
                 Image(systemName: iconName(for: attachment.kind))
-                  .foregroundStyle(.orange)
+                  .foregroundColor(.orange)
                 VStack(alignment: .leading, spacing: 2) {
                   Text(attachment.name)
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
                   Text(formatBytes(attachment.size))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
                 }
                 Button {
                   model.removePendingAttachment(attachment)
                 } label: {
                   Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
               }
               .padding(.horizontal, 10)
               .padding(.vertical, 8)
-              .background(Color(.secondarySystemBackground))
+              .background(Color(uiColor: .secondarySystemBackground))
               .clipShape(Capsule())
             }
           }
@@ -239,14 +240,14 @@ struct SessionDetailView: View {
           if !model.errorMessage.isEmpty {
             Text(model.errorMessage)
               .font(.footnote)
-              .foregroundStyle(.red)
+              .foregroundColor(.red)
               .padding(12)
               .frame(maxWidth: .infinity, alignment: .leading)
           }
         }
         .padding(16)
       }
-      .background(Color(.systemGroupedBackground))
+      .background(Color(uiColor: .systemGroupedBackground))
       .onChange(of: model.session?.messages.count ?? 0) { _ in
         if let lastMessageId = model.session?.messages.last?.id {
           withAnimation(.easeOut(duration: 0.2)) {
@@ -261,7 +262,7 @@ struct SessionDetailView: View {
     List {
       if (model.session?.events ?? []).isEmpty {
         Text("还没有事件记录")
-          .foregroundStyle(.secondary)
+          .foregroundColor(.secondary)
       } else {
         ForEach((model.session?.events ?? []).reversed(), id: \.id) { event in
           VStack(alignment: .leading, spacing: 6) {
@@ -271,12 +272,12 @@ struct SessionDetailView: View {
               Spacer()
               Text(event.timestamp)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundColor(.secondary)
             }
 
             Text(model.eventBody(event))
               .font(.subheadline)
-              .foregroundStyle(.secondary)
+              .foregroundColor(.secondary)
           }
           .padding(.vertical, 4)
         }
@@ -289,7 +290,7 @@ struct SessionDetailView: View {
     List {
       if (model.session?.artifacts ?? []).isEmpty {
         Text("还没有产物")
-          .foregroundStyle(.secondary)
+          .foregroundColor(.secondary)
       } else {
         ForEach(model.session?.artifacts ?? []) { artifact in
           Button {
@@ -297,19 +298,19 @@ struct SessionDetailView: View {
           } label: {
             HStack(spacing: 12) {
               Image(systemName: iconName(for: artifact.kind))
-                .foregroundStyle(.orange)
+                .foregroundColor(.orange)
               VStack(alignment: .leading, spacing: 5) {
                 Text(artifact.name)
                   .font(.headline)
-                  .foregroundStyle(.primary)
+                  .foregroundColor(.primary)
                   .lineLimit(1)
                 Text(artifactMetaText(artifact))
                   .font(.caption)
-                  .foregroundStyle(.secondary)
+                  .foregroundColor(.secondary)
               }
               Spacer()
               Image(systemName: "arrow.up.right.square")
-                .foregroundStyle(.secondary)
+                .foregroundColor(.secondary)
             }
             .padding(.vertical, 4)
           }
@@ -522,7 +523,7 @@ private struct ArtifactPreviewSheet: View {
           if textPreview.truncated {
             Text("当前仅展示前 200 行或前 16000 个字符。")
               .font(.caption)
-              .foregroundStyle(.secondary)
+              .foregroundColor(.secondary)
           }
 
           Text(textPreview.text)
@@ -532,7 +533,7 @@ private struct ArtifactPreviewSheet: View {
         }
         .padding(16)
       }
-      .background(Color(.systemGroupedBackground))
+      .background(Color(uiColor: .systemGroupedBackground))
     } else {
       ContentUnavailableView(
         "文本预览失败",
@@ -586,10 +587,10 @@ private struct MessageBubble: View {
     VStack(alignment: .leading, spacing: 6) {
       Text(message.role == "assistant" ? "Codex" : "你")
         .font(.caption.weight(.semibold))
-        .foregroundStyle(titleColor)
+        .foregroundColor(titleColor)
       Text(message.text)
         .font(.body)
-        .foregroundStyle(bodyColor)
+        .foregroundColor(bodyColor)
 
       if !message.attachments.isEmpty {
         VStack(alignment: .leading, spacing: 6) {
@@ -605,7 +606,7 @@ private struct MessageBubble: View {
                     .lineLimit(1)
                   Text(formatBytes(attachment.size ?? 0))
                     .font(.caption2)
-                    .foregroundStyle(metaColor)
+                    .foregroundColor(metaColor)
                 }
                 Spacer(minLength: 0)
               }
@@ -621,7 +622,7 @@ private struct MessageBubble: View {
 
       Text(message.createdAt)
         .font(.caption2)
-        .foregroundStyle(metaColor)
+        .foregroundColor(metaColor)
     }
     .padding(12)
     .background(bubbleBackgroundColor)

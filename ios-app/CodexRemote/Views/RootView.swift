@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
   @EnvironmentObject private var settings: AppSettingsStore
@@ -75,10 +76,10 @@ struct RootView: View {
         if !errorMessage.isEmpty {
           Text(errorMessage)
             .font(.footnote)
-            .foregroundStyle(.red)
+            .foregroundColor(.red)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(.ultraThinMaterial, in: Capsule())
+            .background(Color(uiColor: .secondarySystemBackground).opacity(0.96), in: Capsule())
             .padding(.bottom, 12)
         }
       }
@@ -143,17 +144,17 @@ private struct SessionRow: View {
         Spacer()
         Text(statusText)
           .font(.caption.weight(.semibold))
-          .foregroundStyle(statusColor)
+          .foregroundColor(statusColor)
       }
 
       Text(session.preview.isEmpty ? "暂无摘要" : session.preview)
         .font(.subheadline)
-        .foregroundStyle(.secondary)
+        .foregroundColor(.secondary)
         .lineLimit(2)
 
       Text(session.updatedAt)
         .font(.caption)
-        .foregroundStyle(.tertiary)
+        .foregroundColor(Color(uiColor: .tertiaryLabel))
         .lineLimit(1)
     }
     .padding(.vertical, 4)

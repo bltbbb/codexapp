@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
   @Environment(\.dismiss) private var dismiss
@@ -63,7 +64,7 @@ struct SettingsView: View {
       Section("后端设备列表") {
         if settings.pushDevices.isEmpty {
           Text("还没有已注册设备")
-            .foregroundStyle(.secondary)
+            .foregroundColor(.secondary)
         } else {
           ForEach(settings.pushDevices) { device in
             VStack(alignment: .leading, spacing: 6) {
@@ -73,18 +74,18 @@ struct SettingsView: View {
                 Spacer()
                 Text(device.pushEnabled ? "已启用" : "已关闭")
                   .font(.caption.weight(.semibold))
-                  .foregroundStyle(deviceStatusColor(device))
+                  .foregroundColor(deviceStatusColor(device))
               }
 
               if let tokenMasked = device.tokenMasked, !tokenMasked.isEmpty {
                 Text(tokenMasked)
                   .font(.caption)
-                  .foregroundStyle(.secondary)
+                  .foregroundColor(.secondary)
               }
 
               Text(device.bundleId)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundColor(.secondary)
             }
             .padding(.vertical, 4)
           }
@@ -94,14 +95,14 @@ struct SettingsView: View {
       if !settings.lastStatusMessage.isEmpty {
         Section("状态") {
           Text(settings.lastStatusMessage)
-            .foregroundStyle(.green)
+            .foregroundColor(.green)
         }
       }
 
       if !settings.lastErrorMessage.isEmpty {
         Section("错误") {
           Text(settings.lastErrorMessage)
-            .foregroundStyle(.red)
+            .foregroundColor(.red)
         }
       }
     }
