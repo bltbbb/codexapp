@@ -14,8 +14,11 @@
 ```bash
 brew install xcodegen
 cd ios-app
+bash scripts/prepare_app_icon.sh
 xcodegen generate
 ```
+
+如果替换过 `AppIcon.appiconset/Icon.png`，这一步会在生成工程前自动把图标规范成 `1024x1024`，避免 `actool` 因尺寸不符直接报错。
 
 生成后用 Xcode 打开：
 

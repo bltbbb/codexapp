@@ -32,6 +32,11 @@ jobs:
         shell: bash
         run: brew install xcodegen
 
+      - name: 规范化 AppIcon
+        shell: bash
+        run: |
+          bash "$IOS_PROJECT_DIR/scripts/prepare_app_icon.sh"
+
       - name: 生成 Xcode 工程
         shell: bash
         run: |
