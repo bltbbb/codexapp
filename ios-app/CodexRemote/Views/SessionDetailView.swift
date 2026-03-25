@@ -475,6 +475,10 @@ struct SessionDetailView: View {
       return nil
     }
 
+    if session.messages.last?.role == "assistant" {
+      return nil
+    }
+
     let latestAssistantDate = session.messages
       .filter { $0.role == "assistant" }
       .map { DisplayTime.sortableDate($0.createdAt) }
