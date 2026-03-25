@@ -293,6 +293,11 @@ struct SessionDetailView: View {
         .textSelection(.enabled)
       }
       .background(Color(uiColor: .systemGroupedBackground))
+      .simultaneousGesture(
+        TapGesture().onEnded {
+          isComposerFocused = false
+        }
+      )
       .onChange(of: scrollTargetId) { targetId in
         if let targetId {
           withAnimation(.easeOut(duration: 0.2)) {
@@ -329,6 +334,11 @@ struct SessionDetailView: View {
       }
     }
     .listStyle(.insetGrouped)
+    .simultaneousGesture(
+      TapGesture().onEnded {
+        isComposerFocused = false
+      }
+    )
   }
 
   private var artifactList: some View {
@@ -364,6 +374,11 @@ struct SessionDetailView: View {
       }
     }
     .listStyle(.insetGrouped)
+    .simultaneousGesture(
+      TapGesture().onEnded {
+        isComposerFocused = false
+      }
+    )
   }
 
   private var streamText: String {
@@ -715,9 +730,10 @@ private struct MessageBubble: View {
       Text(message.role == "assistant" ? "Codex" : "你")
         .font(.caption.weight(.semibold))
         .foregroundColor(titleColor)
-      MarkdownMessageText(message.text)
-        .font(.body)
-        .foregroundColor(bodyColor)
+      SelectableMarkdownTextView(
+        rawText: message.text,
+        textColor: UIColor(bodyColor)
+      )
         .frame(maxWidth: .infinity, alignment: .leading)
 
       if !message.attachments.isEmpty {
@@ -855,32 +871,5 @@ private struct StatusEventBubble: View {
     default:
       return .secondary
     }
-  }
-}
-
-private struct MarkdownMessageText: View {
-  let rawText: String
-
-  init(_ rawText: String) {
-    self.rawText = rawText
-  }
-
-  var body: some View {
-    renderedText
-      .textSelection(.enabled)
-  }
-
-  private var renderedText: Text {
-    guard let attributed = try? AttributedString(
-      markdown: rawText,
-      options: AttributedString.MarkdownParsingOptions(
-        interpretedSyntax: .full,
-        failurePolicy: .returnPartiallyParsedIfPossible
-      )
-    ) else {
-      return Text(rawText)
-    }
-
-    return Text(attributed)
   }
 }
