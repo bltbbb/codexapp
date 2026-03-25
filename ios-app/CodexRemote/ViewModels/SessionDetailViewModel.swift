@@ -44,6 +44,7 @@ final class SessionDetailViewModel: ObservableObject {
       return
     }
 
+    debugPrint("[ios-send][vm] chars=\(message.count) lines=\(debugLineCount(message)) preview=\(debugPreview(message))")
     let currentAttachments = pendingAttachments
     isSending = true
     defer { isSending = false }
@@ -69,6 +70,18 @@ final class SessionDetailViewModel: ObservableObject {
     } catch {
       errorMessage = error.localizedDescription
     }
+  }
+
+  private func debugLineCount(_ text: String) -> Int {
+    max(1, text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n").count)
+  }
+
+  private func debugPreview(_ text: String, limit: Int = 120) -> String {
+    let normalized = text
+      .replacingOccurrences(of: "\r", with: "\\r")
+      .replacingOccurrences(of: "\n", with: "\\n")
+      .replacingOccurrences(of: "\t", with: "\\t")
+    return normalized.count > limit ? String(normalized.prefix(limit)) + "…" : normalized
   }
 
   func stop(using settings: AppSettingsStore) async {

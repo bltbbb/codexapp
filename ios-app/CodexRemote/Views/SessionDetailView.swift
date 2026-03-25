@@ -708,10 +708,23 @@ struct SessionDetailView: View {
       return
     }
 
+    debugPrint("[ios-send][view] chars=\(model.draftMessage.count) lines=\(debugLineCount(model.draftMessage)) preview=\(debugPreview(model.draftMessage))")
     isComposerFocused = false
     Task {
       await model.send(using: settings)
     }
+  }
+
+  private func debugLineCount(_ text: String) -> Int {
+    max(1, text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n").count)
+  }
+
+  private func debugPreview(_ text: String, limit: Int = 120) -> String {
+    let normalized = text
+      .replacingOccurrences(of: "\r", with: "\\r")
+      .replacingOccurrences(of: "\n", with: "\\n")
+      .replacingOccurrences(of: "\t", with: "\\t")
+    return normalized.count > limit ? String(normalized.prefix(limit)) + "…" : normalized
   }
 }
 

@@ -45,6 +45,7 @@ final class CodexAPI {
   }
 
   func sendMessage(sessionId: String, text: String, attachments: [AttachmentUploadPayload] = []) async throws -> CodexSession? {
+    debugPrint("[ios-send][api] chars=\(text.count) lines=\(debugLineCount(text)) preview=\(debugPreview(text))")
     let response: SendMessageEnvelope = try await request(
       path: "/api/sessions/\(sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sessionId)/messages",
       method: "POST",
@@ -118,6 +119,9 @@ final class CodexAPI {
 
     if let body {
       request.httpBody = try encoder.encode(body)
+      if path.contains("/messages"), let bodyText = String(data: request.httpBody ?? Data(), encoding: .utf8) {
+        debugPrint("[ios-send][http-body] chars=\(bodyText.count) preview=\(debugPreview(bodyText))")
+      }
     }
 
     let (data, response) = try await URLSession.shared.data(for: request)
@@ -163,5 +167,17 @@ final class CodexAPI {
     }
 
     return url
+  }
+
+  private func debugLineCount(_ text: String) -> Int {
+    max(1, text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n").count)
+  }
+
+  private func debugPreview(_ text: String, limit: Int = 160) -> String {
+    let normalized = text
+      .replacingOccurrences(of: "\r", with: "\\r")
+      .replacingOccurrences(of: "\n", with: "\\n")
+      .replacingOccurrences(of: "\t", with: "\\t")
+    return normalized.count > limit ? String(normalized.prefix(limit)) + "…" : normalized
   }
 }
