@@ -486,18 +486,20 @@ struct SessionDetailView: View {
       )
     }
 
-    let statusEntries = session.events.enumerated().compactMap { item in
+    let statusEntries = session.events.enumerated().reduce(into: [ConversationEntry]()) { result, item in
       let (index, event) = item
       guard shouldDisplayInConversation(event) else {
-        return nil
+        return
       }
 
-      return ConversationEntry(
-        id: "event-\(event.id)",
-        sortDate: DisplayTime.sortableDate(event.timestamp),
-        priority: event.type == "status" ? 0 : 2,
-        fallbackIndex: index,
-        content: .event(event)
+      result.append(
+        ConversationEntry(
+          id: "event-\(event.id)",
+          sortDate: DisplayTime.sortableDate(event.timestamp),
+          priority: event.type == "status" ? 0 : 2,
+          fallbackIndex: index,
+          content: .event(event)
+        )
       )
     }
 
