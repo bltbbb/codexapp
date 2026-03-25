@@ -152,7 +152,7 @@ private struct SessionRow: View {
         .foregroundColor(.secondary)
         .lineLimit(2)
 
-      Text(session.updatedAt)
+      Text(DisplayTime.text(session.updatedAt))
         .font(.caption)
         .foregroundColor(Color(uiColor: .tertiaryLabel))
         .lineLimit(1)

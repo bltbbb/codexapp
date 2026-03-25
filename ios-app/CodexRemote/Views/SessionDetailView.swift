@@ -261,18 +261,25 @@ struct SessionDetailView: View {
     ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
-          if !statusNodes.isEmpty {
-            StatusNodeStrip(nodes: statusNodes)
-          }
-
-          ForEach(model.session?.messages ?? []) { message in
-            MessageBubble(
-              message: message,
-              iconName: iconName(for:),
-              formatBytes: formatBytes(_:),
-              openAttachment: openMessageAttachment(_:)
-            )
-              .id(message.id)
+          ForEach(conversationEntries) { entry in
+            switch entry.content {
+            case let .message(message):
+              MessageBubble(
+                message: message,
+                iconName: iconName(for:),
+                formatBytes: formatBytes(_:),
+                openAttachment: openMessageAttachment(_:),
+                formatTime: formatDisplayTime(_:)
+              )
+                .id(entry.id)
+            case let .event(event):
+              StatusEventBubble(
+                event: event,
+                detail: statusEventDetail(event),
+                formatTime: formatDisplayTime(_:)
+              )
+                .id(entry.id)
+            }
           }
 
           if !model.errorMessage.isEmpty {
@@ -284,12 +291,13 @@ struct SessionDetailView: View {
           }
         }
         .padding(16)
+        .textSelection(.enabled)
       }
       .background(Color(uiColor: .systemGroupedBackground))
-      .onChange(of: model.session?.messages.count ?? 0) { _ in
-        if let lastMessageId = model.session?.messages.last?.id {
+      .onChange(of: conversationEntries.count) { _ in
+        if let lastEntryId = conversationEntries.last?.id {
           withAnimation(.easeOut(duration: 0.2)) {
-            proxy.scrollTo(lastMessageId, anchor: .bottom)
+            proxy.scrollTo(lastEntryId, anchor: .bottom)
           }
         }
       }
@@ -308,7 +316,7 @@ struct SessionDetailView: View {
               Text(model.eventTitle(event))
                 .font(.headline)
               Spacer()
-              Text(event.timestamp)
+              Text(formatDisplayTime(event.timestamp))
                 .font(.caption)
                 .foregroundColor(.secondary)
             }
@@ -414,7 +422,7 @@ struct SessionDetailView: View {
     [
       artifact.kind ?? "file",
       artifact.mimeType ?? "",
-      artifact.createdAt ?? "",
+      formatDisplayTime(artifact.createdAt),
     ]
     .filter { !$0.isEmpty }
     .joined(separator: " | ")
@@ -463,69 +471,70 @@ struct SessionDetailView: View {
     return formatter.string(fromByteCount: Int64(value))
   }
 
-  private var statusNodes: [StatusNodeItem] {
+  private var conversationEntries: [ConversationEntry] {
     guard let session = model.session else {
       return []
     }
 
-    var nodes: [StatusNodeItem] = []
-    let currentDetail = latestStatusDetail(in: session)
-      ?? (session.lastError?.trimmingCharacters(in: .whitespacesAndNewlines))
-      ?? statusText
-
-    nodes.append(
-      StatusNodeItem(
-        id: "current-\(session.id)-\(session.updatedAt)",
-        title: "当前状态",
-        detail: currentDetail,
-        tint: statusTint(for: session.status)
+    let messageEntries = session.messages.enumerated().map { index, message in
+      ConversationEntry(
+        id: "message-\(message.id)",
+        sortDate: DisplayTime.sortableDate(message.createdAt),
+        priority: 1,
+        fallbackIndex: index,
+        content: .message(message)
       )
-    )
-
-    let recentEvents = session.events.compactMap(statusNode(for:)).suffix(3)
-    nodes.append(contentsOf: recentEvents)
-    return nodes
-  }
-
-  private func latestStatusDetail(in session: CodexSession) -> String? {
-    for event in session.events.reversed() {
-      if let node = statusNode(for: event) {
-        return node.detail
-      }
     }
-    return nil
-  }
 
-  private func statusNode(for event: CodexEvent) -> StatusNodeItem? {
-    switch event.type {
-    case "status":
-      let detail = (event.payload.text ?? event.payload.status ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !detail.isEmpty else {
+    let statusEntries = session.events.enumerated().compactMap { index, event in
+      guard shouldDisplayInConversation(event) else {
         return nil
       }
-      return StatusNodeItem(id: event.id, title: "状态节点", detail: detail, tint: .orange)
-    case "error":
-      let detail = (event.payload.message ?? event.payload.text ?? "任务执行失败").trimmingCharacters(in: .whitespacesAndNewlines)
-      return StatusNodeItem(id: event.id, title: "错误节点", detail: detail, tint: .red)
-    case "done":
-      let detail = (event.payload.status ?? "任务已结束").trimmingCharacters(in: .whitespacesAndNewlines)
-      return StatusNodeItem(id: event.id, title: "完成节点", detail: detail, tint: .green)
-    default:
-      return nil
+
+      return ConversationEntry(
+        id: "event-\(event.id)",
+        sortDate: DisplayTime.sortableDate(event.timestamp),
+        priority: event.type == "status" ? 0 : 2,
+        fallbackIndex: index,
+        content: .event(event)
+      )
+    }
+
+    return (messageEntries + statusEntries).sorted { lhs, rhs in
+      if lhs.sortDate != rhs.sortDate {
+        return lhs.sortDate < rhs.sortDate
+      }
+      if lhs.priority != rhs.priority {
+        return lhs.priority < rhs.priority
+      }
+      return lhs.fallbackIndex < rhs.fallbackIndex
     }
   }
 
-  private func statusTint(for status: String) -> Color {
-    switch status {
-    case "running":
-      return .orange
-    case "error":
-      return .red
-    case "stopped":
-      return .gray
+  private func shouldDisplayInConversation(_ event: CodexEvent) -> Bool {
+    switch event.type {
+    case "status", "error", "done":
+      return !statusEventDetail(event).isEmpty
     default:
-      return .green
+      return false
     }
+  }
+
+  private func statusEventDetail(_ event: CodexEvent) -> String {
+    switch event.type {
+    case "status":
+      return (event.payload.text ?? event.payload.status ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    case "error":
+      return (event.payload.message ?? event.payload.text ?? "任务执行失败").trimmingCharacters(in: .whitespacesAndNewlines)
+    case "done":
+      return (event.payload.status ?? "任务已结束").trimmingCharacters(in: .whitespacesAndNewlines)
+    default:
+      return ""
+    }
+  }
+
+  private func formatDisplayTime(_ rawValue: String?) -> String {
+    DisplayTime.text(rawValue)
   }
 
   private func sendMessage() {
@@ -689,6 +698,7 @@ private struct MessageBubble: View {
   let iconName: (String?) -> String
   let formatBytes: (Int) -> String
   let openAttachment: (CodexMessageAttachment) -> Void
+  let formatTime: (String) -> String
 
   var body: some View {
     HStack {
@@ -710,6 +720,7 @@ private struct MessageBubble: View {
       MarkdownMessageText(message.text)
         .font(.body)
         .foregroundColor(bodyColor)
+        .frame(maxWidth: .infinity, alignment: .leading)
 
       if !message.attachments.isEmpty {
         VStack(alignment: .leading, spacing: 6) {
@@ -739,13 +750,14 @@ private struct MessageBubble: View {
         }
       }
 
-      Text(message.createdAt)
+      Text(formatTime(message.createdAt))
         .font(.caption2)
         .foregroundColor(metaColor)
     }
     .padding(12)
     .background(bubbleBackgroundColor)
     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    .textSelection(.enabled)
   }
 
   private var titleColor: Color {
@@ -769,44 +781,94 @@ private struct MessageBubble: View {
   }
 }
 
-private struct StatusNodeItem: Identifiable {
+private struct ConversationEntry: Identifiable {
   let id: String
-  let title: String
-  let detail: String
-  let tint: Color
+  let sortDate: Date
+  let priority: Int
+  let fallbackIndex: Int
+  let content: Content
+
+  enum Content {
+    case message(CodexMessage)
+    case event(CodexEvent)
+  }
 }
 
-private struct StatusNodeStrip: View {
-  let nodes: [StatusNodeItem]
+private struct StatusEventBubble: View {
+  let event: CodexEvent
+  let detail: String
+  let formatTime: (String) -> String
 
   var body: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 10) {
-        ForEach(nodes) { node in
-          VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-              Circle()
-                .fill(node.tint)
-                .frame(width: 8, height: 8)
-
-              Text(node.title)
-                .font(.caption.weight(.semibold))
-                .foregroundColor(node.tint)
-            }
-
-            Text(node.detail)
-              .font(.caption)
-              .foregroundColor(.primary)
-              .lineLimit(3)
-              .frame(width: 180, alignment: .leading)
+    HStack {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 8) {
+          if event.type == "status" {
+            ProgressView()
+              .controlSize(.small)
+          } else {
+            Image(systemName: iconName)
+              .foregroundColor(tintColor)
           }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 10)
-          .background(Color(uiColor: .secondarySystemBackground))
-          .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+          Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundColor(tintColor)
         }
+
+        Text(detail)
+          .font(.footnote)
+          .foregroundColor(.primary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+        Text(formatTime(event.timestamp))
+          .font(.caption2)
+          .foregroundColor(.secondary)
       }
-      .padding(.bottom, 4)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 10)
+      .background(Color(uiColor: .secondarySystemBackground))
+      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+      Spacer(minLength: 48)
+    }
+    .textSelection(.enabled)
+  }
+
+  private var title: String {
+    switch event.type {
+    case "status":
+      return "执行中"
+    case "error":
+      return "执行失败"
+    case "done":
+      return "执行完成"
+    default:
+      return "状态更新"
+    }
+  }
+
+  private var iconName: String {
+    switch event.type {
+    case "error":
+      return "exclamationmark.circle.fill"
+    case "done":
+      return "checkmark.circle.fill"
+    default:
+      return "clock.fill"
+    }
+  }
+
+  private var tintColor: Color {
+    switch event.type {
+    case "status":
+      return .orange
+    case "error":
+      return .red
+    case "done":
+      return .green
+    default:
+      return .secondary
     }
   }
 }
