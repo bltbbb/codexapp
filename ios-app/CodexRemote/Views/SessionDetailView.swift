@@ -155,7 +155,7 @@ struct SessionDetailView: View {
   }
 
   private var composer: some View {
-    VStack(spacing: 10) {
+    VStack(spacing: 12) {
       if !model.pendingAttachments.isEmpty {
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: 8) {
@@ -181,58 +181,93 @@ struct SessionDetailView: View {
               }
               .padding(.horizontal, 10)
               .padding(.vertical, 8)
-              .background(Color(uiColor: .secondarySystemBackground))
+              .background(Color.white.opacity(0.92))
               .clipShape(Capsule())
+              .overlay(
+                Capsule()
+                  .stroke(Color.black.opacity(0.04), lineWidth: 1)
+              )
             }
           }
         }
       }
 
-      HStack(alignment: .bottom, spacing: 10) {
-        PhotosPicker(
-          selection: $selectedPhotoItems,
-          maxSelectionCount: 3,
-          matching: .images
-        ) {
-          Image(systemName: "plus.circle.fill")
-            .font(.system(size: 22))
-        }
-        .buttonStyle(.plain)
-
-        Button {
-          showingFileImporter = true
-        } label: {
-          Image(systemName: "paperclip.circle.fill")
-            .font(.system(size: 22))
-        }
-        .buttonStyle(.plain)
-
-        TextField("输入消息…", text: $model.draftMessage, axis: .vertical)
-          .textFieldStyle(.roundedBorder)
+      VStack(spacing: 12) {
+        TextField("Type a message for AI", text: $model.draftMessage, axis: .vertical)
           .focused($isComposerFocused)
           .lineLimit(1 ... 6)
           .submitLabel(.send)
           .onSubmit {
             sendMessage()
           }
+          .font(.system(size: 20, weight: .medium))
+          .padding(.horizontal, 22)
+          .padding(.vertical, 18)
+          .background(Color.white.opacity(0.95))
+          .clipShape(Capsule())
+          .shadow(color: Color.black.opacity(0.06), radius: 20, x: 0, y: 10)
 
-        Button {
-          sendMessage()
-        } label: {
-          if model.isSending {
-            ProgressView()
-              .tint(.white)
-          } else {
-            Image(systemName: "paperplane.fill")
+        HStack(spacing: 14) {
+          PhotosPicker(
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 3,
+            matching: .images
+          ) {
+            composerToolIcon("photo")
           }
+          .buttonStyle(.plain)
+
+          Button {
+            showingFileImporter = true
+          } label: {
+            composerToolIcon("plus")
+          }
+          .buttonStyle(.plain)
+
+          Spacer(minLength: 0)
+
+          Button {
+            sendMessage()
+          } label: {
+            ZStack {
+              Circle()
+                .fill(sendButtonBackground)
+                .frame(width: 58, height: 58)
+
+              if model.isSending {
+                ProgressView()
+                  .tint(sendButtonForeground)
+              } else {
+                Image(systemName: "arrow.up")
+                  .font(.system(size: 24, weight: .medium))
+                  .foregroundColor(sendButtonForeground)
+              }
+            }
+          }
+          .buttonStyle(.plain)
+          .disabled(sendButtonDisabled)
         }
-        .buttonStyle(.borderedProminent)
-        .disabled(model.isSending || (model.draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.pendingAttachments.isEmpty))
       }
+      .padding(.horizontal, 16)
+      .padding(.top, 16)
+      .padding(.bottom, 12)
+      .background(Color.white.opacity(0.78))
+      .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+      .shadow(color: Color.black.opacity(0.08), radius: 24, x: 0, y: 10)
     }
     .padding(.horizontal, 16)
-    .padding(.top, 12)
+    .padding(.top, 10)
     .padding(.bottom, 12)
+    .background(
+      LinearGradient(
+        colors: [
+          Color.white.opacity(0.94),
+          Color(uiColor: .systemGray6),
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+    )
     .onChange(of: selectedPhotoItems) { newItems in
       let captured = newItems
       selectedPhotoItems = []
@@ -254,6 +289,30 @@ struct SessionDetailView: View {
         model.errorMessage = error.localizedDescription
       }
     }
+  }
+
+  private func composerToolIcon(_ systemName: String) -> some View {
+    ZStack {
+      Circle()
+        .fill(Color.black.opacity(0.04))
+        .frame(width: 46, height: 46)
+
+      Image(systemName: systemName)
+        .font(.system(size: 21, weight: .medium))
+        .foregroundColor(.primary)
+    }
+  }
+
+  private var sendButtonDisabled: Bool {
+    model.isSending || (model.draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.pendingAttachments.isEmpty)
+  }
+
+  private var sendButtonBackground: Color {
+    sendButtonDisabled ? Color.black.opacity(0.10) : Color.black.opacity(0.88)
+  }
+
+  private var sendButtonForeground: Color {
+    sendButtonDisabled ? .secondary : .white
   }
 
   private func loadPhotoAttachments(_ items: [PhotosPickerItem]) async {
