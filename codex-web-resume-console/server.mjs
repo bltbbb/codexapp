@@ -254,6 +254,14 @@ async function handleApi(req, res, requestUrl) {
 
     const body = await readJsonBody(req, { maxBytes: 16 * 1024 * 1024 });
     const message = String(body?.message || '').trim();
+    const debugBodyLength = String(req.headers['x-debug-message-body-length'] || '').trim();
+    const debugBodyLines = String(req.headers['x-debug-message-body-lines'] || '').trim();
+    const debugBodyPreview = String(req.headers['x-debug-message-body-preview'] || '').trim();
+    if (debugBodyLength || debugBodyLines || debugBodyPreview) {
+      console.log(
+        `[web-resume][msg-client] session=${session.id} bodyLen=${debugBodyLength || '-'} bodyLines=${debugBodyLines || '-'} bodyPreview=${debugBodyPreview || '-'}`
+      );
+    }
     console.log(`[web-resume][msg-recv] session=${session.id} len=${message.length} preview=${summarizeDebugText(message)}`);
     const attachments = saveIncomingAttachments(session.id, body?.attachments);
     if (!message && !attachments.length) {

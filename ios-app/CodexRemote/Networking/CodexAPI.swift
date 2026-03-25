@@ -124,6 +124,12 @@ final class CodexAPI {
       }
     }
 
+    if path.contains("/messages"), method == "POST", let bodyText = request.httpBody.flatMap({ String(data: $0, encoding: .utf8) }) {
+      request.setValue("\(bodyText.count)", forHTTPHeaderField: "x-debug-message-body-length")
+      request.setValue("\(debugLineCount(bodyText))", forHTTPHeaderField: "x-debug-message-body-lines")
+      request.setValue(debugHeaderPreview(bodyText), forHTTPHeaderField: "x-debug-message-body-preview")
+    }
+
     let (data, response) = try await URLSession.shared.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse else {
       throw CodexAPIError.invalidResponse
@@ -179,5 +185,14 @@ final class CodexAPI {
       .replacingOccurrences(of: "\n", with: "\\n")
       .replacingOccurrences(of: "\t", with: "\\t")
     return normalized.count > limit ? String(normalized.prefix(limit)) + "…" : normalized
+  }
+
+  private func debugHeaderPreview(_ text: String, limit: Int = 120) -> String {
+    let normalized = text
+      .replacingOccurrences(of: "\r", with: "\\r")
+      .replacingOccurrences(of: "\n", with: "\\n")
+      .replacingOccurrences(of: "\t", with: "\\t");
+    let clipped = normalized.count > limit ? String(normalized.prefix(limit)) : normalized
+    return clipped.unicodeScalars.filter { $0.value >= 32 && $0.value <= 126 }.map(String.init).joined()
   }
 }
