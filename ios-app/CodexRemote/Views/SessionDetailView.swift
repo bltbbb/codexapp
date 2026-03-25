@@ -261,25 +261,24 @@ struct SessionDetailView: View {
     ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
-          ForEach(conversationEntries) { entry in
-            switch entry.content {
-            case let .message(message):
-              MessageBubble(
-                message: message,
-                iconName: iconName(for:),
-                formatBytes: formatBytes(_:),
-                openAttachment: openMessageAttachment(_:),
-                formatTime: formatDisplayTime(_:)
-              )
-                .id(entry.id)
-            case let .event(event):
-              StatusEventBubble(
-                event: event,
-                detail: statusEventDetail(event),
-                formatTime: formatDisplayTime(_:)
-              )
-                .id(entry.id)
-            }
+          ForEach(model.session?.messages ?? []) { message in
+            MessageBubble(
+              message: message,
+              iconName: iconName(for:),
+              formatBytes: formatBytes(_:),
+              openAttachment: openMessageAttachment(_:),
+              formatTime: formatDisplayTime(_:)
+            )
+              .id("message-\(message.id)")
+          }
+
+          if let pendingStatusEvent {
+            StatusEventBubble(
+              event: pendingStatusEvent,
+              detail: statusEventDetail(pendingStatusEvent),
+              formatTime: formatDisplayTime(_:)
+            )
+              .id("pending-status-\(pendingStatusEvent.id)")
           }
 
           if !model.errorMessage.isEmpty {
@@ -294,10 +293,10 @@ struct SessionDetailView: View {
         .textSelection(.enabled)
       }
       .background(Color(uiColor: .systemGroupedBackground))
-      .onChange(of: conversationEntries.count) { _ in
-        if let lastEntryId = conversationEntries.last?.id {
+      .onChange(of: scrollTargetId) { targetId in
+        if let targetId {
           withAnimation(.easeOut(duration: 0.2)) {
-            proxy.scrollTo(lastEntryId, anchor: .bottom)
+            proxy.scrollTo(targetId, anchor: .bottom)
           }
         }
       }
@@ -471,52 +470,44 @@ struct SessionDetailView: View {
     return formatter.string(fromByteCount: Int64(value))
   }
 
-  private var conversationEntries: [ConversationEntry] {
+  private var pendingStatusEvent: CodexEvent? {
     guard let session = model.session else {
-      return []
+      return nil
     }
 
-    let messageEntries = session.messages.enumerated().map { index, message in
-      ConversationEntry(
-        id: "message-\(message.id)",
-        sortDate: DisplayTime.sortableDate(message.createdAt),
-        priority: 1,
-        fallbackIndex: index,
-        content: .message(message)
-      )
-    }
+    let latestAssistantDate = session.messages
+      .filter { $0.role == "assistant" }
+      .map { DisplayTime.sortableDate($0.createdAt) }
+      .max() ?? .distantPast
 
-    let statusEntries = session.events.enumerated().reduce(into: [ConversationEntry]()) { result, item in
-      let (index, event) = item
-      guard shouldDisplayInConversation(event) else {
-        return
+    let candidate = session.events
+      .filter { shouldDisplayPendingStatus($0) }
+      .max { lhs, rhs in
+        DisplayTime.sortableDate(lhs.timestamp) < DisplayTime.sortableDate(rhs.timestamp)
       }
 
-      result.append(
-        ConversationEntry(
-          id: "event-\(event.id)",
-          sortDate: DisplayTime.sortableDate(event.timestamp),
-          priority: event.type == "status" ? 0 : 2,
-          fallbackIndex: index,
-          content: .event(event)
-        )
-      )
+    guard let candidate else {
+      return nil
     }
 
-    return (messageEntries + statusEntries).sorted { lhs, rhs in
-      if lhs.sortDate != rhs.sortDate {
-        return lhs.sortDate < rhs.sortDate
-      }
-      if lhs.priority != rhs.priority {
-        return lhs.priority < rhs.priority
-      }
-      return lhs.fallbackIndex < rhs.fallbackIndex
+    let candidateDate = DisplayTime.sortableDate(candidate.timestamp)
+    guard candidateDate > latestAssistantDate else {
+      return nil
     }
+
+    return candidate
   }
 
-  private func shouldDisplayInConversation(_ event: CodexEvent) -> Bool {
+  private var scrollTargetId: String? {
+    if let pendingStatusEvent {
+      return "pending-status-\(pendingStatusEvent.id)"
+    }
+    return model.session?.messages.last.map { "message-\($0.id)" }
+  }
+
+  private func shouldDisplayPendingStatus(_ event: CodexEvent) -> Bool {
     switch event.type {
-    case "status", "error", "done":
+    case "status", "error":
       return !statusEventDetail(event).isEmpty
     default:
       return false
@@ -781,19 +772,6 @@ private struct MessageBubble: View {
 
   private var bubbleBackgroundColor: Color {
     message.role == "assistant" ? Color(.secondarySystemBackground) : .orange
-  }
-}
-
-private struct ConversationEntry: Identifiable {
-  let id: String
-  let sortDate: Date
-  let priority: Int
-  let fallbackIndex: Int
-  let content: Content
-
-  enum Content {
-    case message(CodexMessage)
-    case event(CodexEvent)
   }
 }
 
