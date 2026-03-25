@@ -69,6 +69,10 @@ export class CodexResumeRunner {
       attachments: Array.isArray(options.attachments) ? options.attachments : [],
       source: options.messageSource || 'web',
     });
+    console.log(
+      `[web-resume][msg-prompt] session=${run.sessionId} displayLen=${displayPrompt.length} promptLen=${normalizedPrompt.length}`
+      + ` display=${summarizeDebugText(displayPrompt)} prompt=${summarizeDebugText(normalizedPrompt)}`
+    );
     this.sessionStore.updateSession(run.sessionId, {
       status: 'running',
       lastError: '',
@@ -451,6 +455,14 @@ function spawnCodexCommand(config, args, options = {}) {
     env: process.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+}
+
+function summarizeDebugText(text, maxLength = 120) {
+  const normalized = String(text || '')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t');
+  return truncateText(normalized, maxLength);
 }
 
 function summarizeExecJsonEvent(event) {

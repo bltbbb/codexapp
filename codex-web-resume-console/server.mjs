@@ -254,6 +254,7 @@ async function handleApi(req, res, requestUrl) {
 
     const body = await readJsonBody(req, { maxBytes: 16 * 1024 * 1024 });
     const message = String(body?.message || '').trim();
+    console.log(`[web-resume][msg-recv] session=${session.id} len=${message.length} preview=${summarizeDebugText(message)}`);
     const attachments = saveIncomingAttachments(session.id, body?.attachments);
     if (!message && !attachments.length) {
       sendJson(res, 400, { error: '消息和附件不能同时为空' });
@@ -965,6 +966,18 @@ function mergeMatchedMessage(currentMessage, transcriptMessage) {
     baseMessage.text = preferLongerMessageText(currentText, transcriptText);
   }
 
+  if (
+    String(currentMessage?.role || '').trim() === 'user'
+    && currentText
+    && transcriptText
+    && currentText !== transcriptText
+  ) {
+    console.log(
+      `[web-resume][msg-merge] currentLen=${currentText.length} transcriptLen=${transcriptText.length} chosenLen=${String(baseMessage.text || '').trim().length}`
+      + ` current=${summarizeDebugText(currentText)} transcript=${summarizeDebugText(transcriptText)} chosen=${summarizeDebugText(baseMessage.text)}`
+    );
+  }
+
   if (!currentAttachments.length) {
     return baseMessage;
   }
@@ -1026,7 +1039,16 @@ function sameConversationMessage(left, right) {
     return true;
   }
 
-  if (leftRole === 'user' && isLikelyAbbreviatedUserMessage(leftText, rightText)) {
+  if (
+    leftRole === 'user'
+    && (
+      leftAttachments.length
+      || rightAttachments.length
+      || leftPromptAttachmentInfo?.displayText
+      || rightPromptAttachmentInfo?.displayText
+    )
+    && isLikelyAbbreviatedUserMessage(leftText, rightText)
+  ) {
     return true;
   }
 
@@ -1589,4 +1611,12 @@ async function readJsonBody(req, options = {}) {
   } catch {
     throw new Error(`请求体不是合法 JSON：${truncateText(raw, 120)}`);
   }
+}
+
+function summarizeDebugText(text, maxLength = 120) {
+  const normalized = String(text || '')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t');
+  return truncateText(normalized, maxLength);
 }
