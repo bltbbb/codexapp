@@ -43,58 +43,91 @@ struct SelectableMarkdownTextView: UIViewRepresentable {
 
   private func makeAttributedText() -> NSAttributedString {
     let baseFontSize: CGFloat = 16.0
+    let baseFont = UIFont.systemFont(ofSize: baseFontSize)
+    let boldFont = UIFont.boldSystemFont(ofSize: baseFontSize)
+    let monoFont = UIFont.monospacedSystemFont(ofSize: baseFontSize - 1, weight: .regular)
     
-    if let attributed = try? AttributedString(
-      markdown: rawText,
-      options: AttributedString.MarkdownParsingOptions(
-        interpretedSyntax: .inlineOnlyPreservingWhitespace, // 使用适合聊天的 markdown 模式
-        failurePolicy: .returnPartiallyParsedIfPossible
-      )
-    ) {
-      // 若原内容包含代码块换行或特殊 markdown，转为更兼容的方案
-      let mutable = NSMutableAttributedString(attributedString: NSAttributedString(attributed))
-      let fullRange = NSRange(location: 0, length: mutable.length)
-      
-      // 1. 放大字体并给代码加上高亮底色
-      mutable.enumerateAttribute(.font, in: fullRange, options: []) { value, range, _ in
-        if let oldFont = value as? UIFont {
-          // Xcode 默认 Markdown 产出的正文一般极小(譬如12pt)，做合适的缩放
-          let scaleFactor = baseFontSize / 12.0
-          let newSize = max(oldFont.pointSize * scaleFactor, baseFontSize)
-          mutable.addAttribute(.font, value: oldFont.withSize(newSize), range: range)
-          
-          if oldFont.fontDescriptor.symbolicTraits.contains(.traitMonoSpace) || oldFont.familyName.contains("Courier") {
-            mutable.addAttribute(.backgroundColor, value: textColor.withAlphaComponent(0.12), range: range)
-          }
-        } else {
-          mutable.addAttribute(.font, value: UIFont.systemFont(ofSize: baseFontSize), range: range)
-        }
-      }
-      
-      // 2. 注入颜色，但不覆盖超链接颜色
-      mutable.enumerateAttribute(.link, in: fullRange, options: []) { value, range, _ in
-        if value == nil {
-          mutable.addAttribute(.foregroundColor, value: textColor, range: range)
-        }
-      }
-      
-      // 3. 行距提升
-      let paragraphStyle = NSMutableParagraphStyle()
-      paragraphStyle.lineSpacing = 6
-      mutable.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
-      
-      return mutable
-    }
-
+    let mutable = NSMutableAttributedString(string: rawText)
+    
+    let fullRange = NSRange(location: 0, length: mutable.length)
+    mutable.addAttribute(.font, value: baseFont, range: fullRange)
+    mutable.addAttribute(.foregroundColor, value: textColor, range: fullRange)
+    
     let paragraphStyle = NSMutableParagraphStyle()
     paragraphStyle.lineSpacing = 6
-    return NSAttributedString(
-      string: rawText,
-      attributes: [
-        .font: UIFont.systemFont(ofSize: baseFontSize),
-        .foregroundColor: textColor,
-        .paragraphStyle: paragraphStyle
+    mutable.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
+    
+    // Helper to apply Regex styles
+    func applyRegex(pattern: String, styleAttributes: [NSAttributedString.Key: Any]) {
+      guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return }
+      let matches = regex.matches(in: mutable.string, options: [], range: NSRange(location: 0, length: mutable.length))
+      for match in matches.reversed() {
+        guard match.numberOfRanges > 1 else { continue }
+        let contentRange = match.range(at: 1)
+        let fullMatchRange = match.range
+        
+        let contentStr = mutable.attributedSubstring(from: contentRange).string
+        let replaceAttrStr = NSMutableAttributedString(string: contentStr)
+        
+        replaceAttrStr.addAttribute(.font, value: baseFont, range: NSRange(location: 0, length: replaceAttrStr.length))
+        replaceAttrStr.addAttribute(.foregroundColor, value: textColor, range: NSRange(location: 0, length: replaceAttrStr.length))
+        replaceAttrStr.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: replaceAttrStr.length))
+        
+        for (k, v) in styleAttributes {
+          replaceAttrStr.addAttribute(k, value: v, range: NSRange(location: 0, length: replaceAttrStr.length))
+        }
+        
+        mutable.replaceCharacters(in: fullMatchRange, with: replaceAttrStr)
+      }
+    }
+    
+    // 1. Code blocks (```code```)
+    applyRegex(
+      pattern: "(?s)```[ \\t]*(?:[a-zA-Z0-9_+-]+)?[ \\t]*\n?(.*?)```",
+      styleAttributes: [
+        .font: monoFont,
+        .backgroundColor: textColor.withAlphaComponent(0.12)
       ]
     )
+    
+    // 2. Inline code (`code`)
+    applyRegex(
+      pattern: "(?s)`([^`]+)`",
+      styleAttributes: [
+        .font: monoFont,
+        .backgroundColor: textColor.withAlphaComponent(0.12)
+      ]
+    )
+    
+    // 3. Bold (**text**)
+    applyRegex(
+      pattern: "(?s)\\*\\*(.*?)\\*\\*",
+      styleAttributes: [
+        .font: boldFont
+      ]
+    )
+    
+    // 4. Links ([text](url))
+    if let linkRegex = try? NSRegularExpression(pattern: "(?s)\\[(.*?)\\]\\((.*?)\\)", options: []) {
+      let matches = linkRegex.matches(in: mutable.string, options: [], range: NSRange(location: 0, length: mutable.length))
+      for match in matches.reversed() {
+        guard match.numberOfRanges > 2 else { continue }
+        let textInfo = mutable.attributedSubstring(from: match.range(at: 1)).string
+        let urlInfo = mutable.attributedSubstring(from: match.range(at: 2)).string
+        
+        let replaceAttrStr = NSMutableAttributedString(string: textInfo)
+        replaceAttrStr.addAttribute(.font, value: baseFont, range: NSRange(location: 0, length: replaceAttrStr.length))
+        replaceAttrStr.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: replaceAttrStr.length))
+        
+        if let url = URL(string: urlInfo) {
+          replaceAttrStr.addAttribute(.link, value: url, range: NSRange(location: 0, length: replaceAttrStr.length))
+        } else {
+          replaceAttrStr.addAttribute(.foregroundColor, value: textColor, range: NSRange(location: 0, length: replaceAttrStr.length))
+        }
+        mutable.replaceCharacters(in: match.range, with: replaceAttrStr)
+      }
+    }
+    
+    return mutable
   }
 }
