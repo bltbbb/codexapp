@@ -490,15 +490,6 @@ struct SessionDetailView: View {
       return nil
     }
 
-    if session.messages.last?.role == "assistant" {
-      return nil
-    }
-
-    let latestAssistantDate = session.messages
-      .filter { $0.role == "assistant" }
-      .map { DisplayTime.sortableDate($0.createdAt) }
-      .max() ?? .distantPast
-
     let candidate = session.events
       .filter { shouldDisplayPendingStatus($0) }
       .max { lhs, rhs in
@@ -510,7 +501,12 @@ struct SessionDetailView: View {
     }
 
     let candidateDate = DisplayTime.sortableDate(candidate.timestamp)
-    guard candidateDate > latestAssistantDate else {
+    let latestDoneDate = session.events
+      .filter { $0.type == "done" }
+      .map { DisplayTime.sortableDate($0.timestamp) }
+      .max() ?? .distantPast
+
+    guard candidateDate > latestDoneDate else {
       return nil
     }
 
