@@ -193,19 +193,29 @@ struct SessionDetailView: View {
       }
 
       VStack(spacing: 12) {
-        TextField("Type a message for AI", text: $model.draftMessage, axis: .vertical)
-          .focused($isComposerFocused)
-          .lineLimit(1 ... 6)
-          .submitLabel(.send)
-          .onSubmit {
-            sendMessage()
+        ZStack(alignment: .leading) {
+          if model.draftMessage.isEmpty {
+            Text("Type a message for AI")
+              .font(.system(size: 20, weight: .medium))
+              .foregroundColor(.secondary.opacity(0.8))
+              .padding(.horizontal, 28)
+              .padding(.vertical, 20)
           }
-          .font(.system(size: 20, weight: .medium))
-          .padding(.horizontal, 22)
-          .padding(.vertical, 18)
-          .background(Color.white.opacity(0.95))
-          .clipShape(Capsule())
-          .shadow(color: Color.black.opacity(0.06), radius: 20, x: 0, y: 10)
+
+          TextEditor(text: $model.draftMessage)
+            .focused($isComposerFocused)
+            .font(.system(size: 20, weight: .medium))
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .scrollContentBackground(.hidden)
+            .frame(minHeight: 66, maxHeight: 148)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(Color.clear)
+        }
+        .background(Color.white.opacity(0.95))
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .shadow(color: Color.black.opacity(0.06), radius: 20, x: 0, y: 10)
 
         HStack(spacing: 14) {
           PhotosPicker(
