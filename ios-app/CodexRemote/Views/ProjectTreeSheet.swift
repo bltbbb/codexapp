@@ -279,19 +279,61 @@ private struct ProjectFilePreviewSheet: View {
 
   var body: some View {
     NavigationStack {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 12) {
+      VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 8) {
+          Text(preview.relativePath)
+            .font(.caption.monospaced())
+            .foregroundColor(.secondary)
+            .textSelection(.enabled)
+
           if preview.truncated {
             Text("当前仅展示前 240 行或前 20000 个字符。")
               .font(.caption)
               .foregroundColor(.secondary)
           }
-
-          Text(preview.text)
-            .font(.system(.body, design: .monospaced))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .textSelection(.enabled)
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+
+        ScrollView([.horizontal, .vertical]) {
+          HStack(alignment: .top, spacing: 0) {
+            VStack(alignment: .trailing, spacing: 0) {
+              ForEach(Array(previewLines.enumerated()), id: \.offset) { index, _ in
+                Text("\(index + 1)")
+                  .font(.system(size: 12, design: .monospaced))
+                  .foregroundColor(.secondary)
+                  .frame(minWidth: 34, alignment: .trailing)
+                  .padding(.trailing, 12)
+                  .padding(.vertical, 1)
+              }
+            }
+            .padding(.vertical, 14)
+            .background(Color(uiColor: .secondarySystemGroupedBackground))
+
+            Rectangle()
+              .fill(Color(uiColor: .separator))
+              .frame(width: 1)
+
+            VStack(alignment: .leading, spacing: 0) {
+              ForEach(Array(previewLines.enumerated()), id: \.offset) { _, line in
+                Text(line.isEmpty ? " " : line)
+                  .font(.system(size: 13, design: .monospaced))
+                  .foregroundColor(.primary)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .padding(.vertical, 1)
+              }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+          }
+          .textSelection(.enabled)
+        }
+        .background(Color(uiColor: .systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(Color(uiColor: .separator), lineWidth: 1)
+        )
         .padding(16)
       }
       .background(Color(uiColor: .systemGroupedBackground))
@@ -305,5 +347,14 @@ private struct ProjectFilePreviewSheet: View {
         }
       }
     }
+  }
+
+  private var previewLines: [String] {
+    let lines = preview.text.replacingOccurrences(of: "\r\n", with: "\n").split(
+      separator: "\n",
+      omittingEmptySubsequences: false
+    )
+    let normalized = lines.map(String.init)
+    return normalized.isEmpty ? [""] : normalized
   }
 }
