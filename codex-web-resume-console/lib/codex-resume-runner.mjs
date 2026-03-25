@@ -99,6 +99,8 @@ export class CodexResumeRunner {
       cwd: session.workdir || this.config.webWorkdir,
     });
     run.proc = proc;
+    proc.stdin.write(normalizedPrompt);
+    proc.stdin.end();
     run.timeoutHandle = setTimeout(() => {
       void this.stop(run.sessionId, 'timeout');
     }, this.config.requestTimeoutMs);
@@ -407,7 +409,7 @@ function buildCodexExecArgs(config, prompt, options = {}) {
   if (isResume) {
     args.push(threadId);
   }
-  args.push(prompt);
+  args.push('-');
   return args;
 }
 
@@ -437,7 +439,7 @@ function spawnCodexCommand(config, args, options = {}) {
     return spawnProcess(config.codexCommand, args, {
       cwd: options.cwd || config.codexWorkdir,
       env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
   }
 
@@ -453,7 +455,7 @@ function spawnCodexCommand(config, args, options = {}) {
   return spawnProcess('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
     cwd: options.cwd || config.codexWorkdir,
     env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
 
