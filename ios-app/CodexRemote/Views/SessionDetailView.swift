@@ -8,6 +8,7 @@ struct SessionDetailView: View {
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.openURL) private var openURL
   @StateObject private var model: SessionDetailViewModel
+  @FocusState private var isComposerFocused: Bool
   @State private var selectedTab = "messages"
   @State private var selectedPhotoItems: [PhotosPickerItem] = []
   @State private var showingFileImporter = false
@@ -179,12 +180,15 @@ struct SessionDetailView: View {
 
         TextField("输入消息…", text: $model.draftMessage, axis: .vertical)
           .textFieldStyle(.roundedBorder)
+          .focused($isComposerFocused)
           .lineLimit(1 ... 6)
+          .submitLabel(.send)
+          .onSubmit {
+            sendMessage()
+          }
 
         Button {
-          Task {
-            await model.send(using: settings)
-          }
+          sendMessage()
         } label: {
           if model.isSending {
             ProgressView()
@@ -257,6 +261,10 @@ struct SessionDetailView: View {
     ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
+          if !statusNodes.isEmpty {
+            StatusNodeStrip(nodes: statusNodes)
+          }
+
           ForEach(model.session?.messages ?? []) { message in
             MessageBubble(
               message: message,
@@ -454,6 +462,87 @@ struct SessionDetailView: View {
     formatter.countStyle = .file
     return formatter.string(fromByteCount: Int64(value))
   }
+
+  private var statusNodes: [StatusNodeItem] {
+    guard let session = model.session else {
+      return []
+    }
+
+    var nodes: [StatusNodeItem] = []
+    let currentDetail = latestStatusDetail(in: session)
+      ?? (session.lastError?.trimmingCharacters(in: .whitespacesAndNewlines))
+      ?? statusText
+
+    nodes.append(
+      StatusNodeItem(
+        id: "current-\(session.id)-\(session.updatedAt)",
+        title: "当前状态",
+        detail: currentDetail,
+        tint: statusTint(for: session.status)
+      )
+    )
+
+    let recentEvents = session.events.compactMap(statusNode(for:)).suffix(3)
+    nodes.append(contentsOf: recentEvents)
+    return nodes
+  }
+
+  private func latestStatusDetail(in session: CodexSession) -> String? {
+    for event in session.events.reversed() {
+      if let node = statusNode(for: event) {
+        return node.detail
+      }
+    }
+    return nil
+  }
+
+  private func statusNode(for event: CodexEvent) -> StatusNodeItem? {
+    switch event.type {
+    case "status":
+      let detail = (event.payload.text ?? event.payload.status ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !detail.isEmpty else {
+        return nil
+      }
+      return StatusNodeItem(id: event.id, title: "状态节点", detail: detail, tint: .orange)
+    case "error":
+      let detail = (event.payload.message ?? event.payload.text ?? "任务执行失败").trimmingCharacters(in: .whitespacesAndNewlines)
+      return StatusNodeItem(id: event.id, title: "错误节点", detail: detail, tint: .red)
+    case "done":
+      let detail = (event.payload.status ?? "任务已结束").trimmingCharacters(in: .whitespacesAndNewlines)
+      return StatusNodeItem(id: event.id, title: "完成节点", detail: detail, tint: .green)
+    default:
+      return nil
+    }
+  }
+
+  private func statusTint(for status: String) -> Color {
+    switch status {
+    case "running":
+      return .orange
+    case "error":
+      return .red
+    case "stopped":
+      return .gray
+    default:
+      return .green
+    }
+  }
+
+  private func sendMessage() {
+    let canSend = !model.isSending
+      && (
+        !model.draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          || !model.pendingAttachments.isEmpty
+      )
+    guard canSend else {
+      return
+    }
+
+    isComposerFocused = false
+    Task {
+      await model.send(using: settings)
+    }
+  }
 }
 
 private struct PreviewTarget: Identifiable {
@@ -618,7 +707,7 @@ private struct MessageBubble: View {
       Text(message.role == "assistant" ? "Codex" : "你")
         .font(.caption.weight(.semibold))
         .foregroundColor(titleColor)
-      Text(message.text)
+      MarkdownMessageText(message.text)
         .font(.body)
         .foregroundColor(bodyColor)
 
@@ -677,5 +766,74 @@ private struct MessageBubble: View {
 
   private var bubbleBackgroundColor: Color {
     message.role == "assistant" ? Color(.secondarySystemBackground) : .orange
+  }
+}
+
+private struct StatusNodeItem: Identifiable {
+  let id: String
+  let title: String
+  let detail: String
+  let tint: Color
+}
+
+private struct StatusNodeStrip: View {
+  let nodes: [StatusNodeItem]
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 10) {
+        ForEach(nodes) { node in
+          VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+              Circle()
+                .fill(node.tint)
+                .frame(width: 8, height: 8)
+
+              Text(node.title)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(node.tint)
+            }
+
+            Text(node.detail)
+              .font(.caption)
+              .foregroundColor(.primary)
+              .lineLimit(3)
+              .frame(width: 180, alignment: .leading)
+          }
+          .padding(.horizontal, 12)
+          .padding(.vertical, 10)
+          .background(Color(uiColor: .secondarySystemBackground))
+          .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+      }
+      .padding(.bottom, 4)
+    }
+  }
+}
+
+private struct MarkdownMessageText: View {
+  let rawText: String
+
+  init(_ rawText: String) {
+    self.rawText = rawText
+  }
+
+  var body: some View {
+    renderedText
+      .textSelection(.enabled)
+  }
+
+  private var renderedText: Text {
+    guard let attributed = try? AttributedString(
+      markdown: rawText,
+      options: AttributedString.MarkdownParsingOptions(
+        interpretedSyntax: .full,
+        failurePolicy: .returnPartiallyParsedIfPossible
+      )
+    ) else {
+      return Text(rawText)
+    }
+
+    return Text(attributed)
   }
 }
