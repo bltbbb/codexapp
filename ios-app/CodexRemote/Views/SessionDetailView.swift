@@ -486,7 +486,8 @@ struct SessionDetailView: View {
       )
     }
 
-    let statusEntries = session.events.enumerated().compactMap { index, event in
+    let statusEntries = session.events.enumerated().compactMap { item in
+      let (index, event) = item
       guard shouldDisplayInConversation(event) else {
         return nil
       }
