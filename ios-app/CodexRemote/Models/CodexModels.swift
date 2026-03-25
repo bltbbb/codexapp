@@ -60,6 +60,35 @@ struct ArtifactTextPreview: Decodable {
   let text: String
 }
 
+struct ProjectTreeDirectoryResponse: Decodable {
+  let rootName: String
+  let workdir: String
+  let currentPath: String
+  let truncated: Bool
+  let entries: [ProjectTreeEntry]
+}
+
+struct ProjectTreeEntry: Decodable, Identifiable, Hashable {
+  let name: String
+  let relativePath: String
+  let type: String
+  let size: Int?
+  let mimeType: String?
+  let kind: String?
+
+  var id: String { relativePath }
+  var isDirectory: Bool { type == "directory" }
+}
+
+struct ProjectFilePreview: Decodable, Identifiable, Hashable {
+  let name: String
+  let relativePath: String
+  let truncated: Bool
+  let text: String
+
+  var id: String { relativePath }
+}
+
 struct PushRegisterRequest: Encodable {
   let deviceId: String
   let deviceToken: String

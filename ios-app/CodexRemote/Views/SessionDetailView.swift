@@ -75,8 +75,11 @@ struct SessionDetailView: View {
         Group {
           if panel == .events {
             eventList
-          } else {
+          } else if panel == .artifacts {
             artifactList
+          } else {
+            ProjectTreeSheet(sessionId: model.sessionId)
+              .environmentObject(settings)
           }
         }
         .navigationTitle(panel.title)
@@ -133,6 +136,16 @@ struct SessionDetailView: View {
         .buttonStyle(.plain)
         .foregroundColor(.secondary)
         .accessibilityLabel("查看产物")
+
+        Button {
+          activePanel = .projectTree
+        } label: {
+          Image(systemName: "folder")
+            .font(.system(size: 18, weight: .semibold))
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(.secondary)
+        .accessibilityLabel("查看项目树")
       }
     }
     .padding(.horizontal, 16)
@@ -636,6 +649,7 @@ struct SessionDetailView: View {
 private enum SessionPanel: String, Identifiable {
   case events
   case artifacts
+  case projectTree
 
   var id: String { rawValue }
 
@@ -645,6 +659,8 @@ private enum SessionPanel: String, Identifiable {
       return "事件"
     case .artifacts:
       return "产物"
+    case .projectTree:
+      return "项目树"
     }
   }
 }

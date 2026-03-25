@@ -94,6 +94,18 @@ final class CodexAPI {
     return try await request(path: "/api/files/\(encodedId)?preview=1")
   }
 
+  func fetchProjectTree(sessionId: String, relativePath: String = "") async throws -> ProjectTreeDirectoryResponse {
+    let encodedSessionId = sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sessionId
+    let encodedPath = relativePath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? relativePath
+    return try await request(path: "/api/sessions/\(encodedSessionId)/project-tree?path=\(encodedPath)")
+  }
+
+  func fetchProjectFilePreview(sessionId: String, relativePath: String) async throws -> ProjectFilePreview {
+    let encodedSessionId = sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sessionId
+    let encodedPath = relativePath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? relativePath
+    return try await request(path: "/api/sessions/\(encodedSessionId)/project-file?path=\(encodedPath)")
+  }
+
   private func request<T: Decodable>(
     path: String,
     method: String = "GET",

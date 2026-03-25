@@ -5,7 +5,15 @@ import { URL } from 'node:url';
 import { config } from './lib/config.mjs';
 import { listRecentCodexSessions, findCodexSessionById, loadCodexSessionTranscript } from '../codex-web-console/lib/codex-history.mjs';
 import { ArtifactManager } from '../codex-web-console/lib/artifact-manager.mjs';
-import { createId, formatError, nowIso, truncateText } from '../codex-web-console/lib/utils.mjs';
+import {
+  createId,
+  formatError,
+  guessArtifactKind,
+  guessMimeType,
+  isSubPath,
+  nowIso,
+  truncateText,
+} from '../codex-web-console/lib/utils.mjs';
 import { SessionStore } from './lib/session-store.mjs';
 import { CodexResumeRunner } from './lib/codex-resume-runner.mjs';
 import { DesktopSessionSync } from './lib/desktop-session-sync.mjs';
@@ -280,6 +288,40 @@ async function handleApi(req, res, requestUrl) {
       return;
     }
     handleSse(req, res, session.id);
+    return;
+  }
+
+  if (req.method === 'GET' && /^\/api\/sessions\/[^/]+\/project-tree$/.test(pathname)) {
+    const sessionId = decodeURIComponent(pathname.split('/')[3] || '');
+    const session = ensureSession(sessionId);
+    if (!session) {
+      sendJson(res, 404, { error: '会话不存在' });
+      return;
+    }
+
+    try {
+      const payload = buildProjectTreePayload(session, requestUrl.searchParams.get('path') || '');
+      sendJson(res, 200, payload);
+    } catch (error) {
+      sendJson(res, 400, { error: formatError(error) });
+    }
+    return;
+  }
+
+  if (req.method === 'GET' && /^\/api\/sessions\/[^/]+\/project-file$/.test(pathname)) {
+    const sessionId = decodeURIComponent(pathname.split('/')[3] || '');
+    const session = ensureSession(sessionId);
+    if (!session) {
+      sendJson(res, 404, { error: '会话不存在' });
+      return;
+    }
+
+    try {
+      const payload = buildProjectFilePreview(session, requestUrl.searchParams.get('path') || '');
+      sendJson(res, 200, payload);
+    } catch (error) {
+      sendJson(res, 400, { error: formatError(error) });
+    }
     return;
   }
 
@@ -1149,6 +1191,168 @@ function serializeSessionDetail(session, options = {}) {
     artifacts: session.artifacts,
     canStop: codexRunner.isRunning(session.id),
   };
+}
+
+function buildProjectTreePayload(session, relativePathInput) {
+  const rootDir = resolveProjectRoot(session);
+  const relativePath = normalizeProjectRelativePath(relativePathInput);
+  const targetPath = resolveProjectChildPath(rootDir, relativePath);
+  if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isDirectory()) {
+    throw new Error('目录不存在');
+  }
+
+  const ignoredDirectoryNames = new Set([
+    '.git',
+    'node_modules',
+    'DerivedData',
+    '.next',
+    'dist',
+    'build',
+    '.turbo',
+  ]);
+  const maxEntries = 400;
+  const dirents = fs.readdirSync(targetPath, { withFileTypes: true })
+    .filter((item) => !(item.isDirectory() && ignoredDirectoryNames.has(item.name)))
+    .sort((lhs, rhs) => {
+      if (lhs.isDirectory() !== rhs.isDirectory()) {
+        return lhs.isDirectory() ? -1 : 1;
+      }
+      return lhs.name.localeCompare(rhs.name, 'zh-CN', { numeric: true, sensitivity: 'base' });
+    });
+
+  const visibleDirents = dirents.slice(0, maxEntries);
+  const entries = visibleDirents.map((dirent) => {
+    const fullPath = path.join(targetPath, dirent.name);
+    const entryRelativePath = normalizeProjectRelativePath(path.relative(rootDir, fullPath));
+    const stat = fs.statSync(fullPath);
+    return {
+      name: dirent.name,
+      relativePath: entryRelativePath,
+      type: dirent.isDirectory() ? 'directory' : 'file',
+      size: dirent.isDirectory() ? null : stat.size,
+      mimeType: dirent.isDirectory() ? null : guessMimeType(fullPath),
+      kind: dirent.isDirectory() ? null : guessArtifactKind(fullPath),
+    };
+  });
+
+  return {
+    rootName: path.basename(rootDir),
+    workdir: rootDir,
+    currentPath: relativePath,
+    truncated: dirents.length > visibleDirents.length,
+    entries,
+  };
+}
+
+function buildProjectFilePreview(session, relativePathInput) {
+  const rootDir = resolveProjectRoot(session);
+  const relativePath = normalizeProjectRelativePath(relativePathInput);
+  if (!relativePath) {
+    throw new Error('缺少文件路径');
+  }
+
+  const filePath = resolveProjectChildPath(rootDir, relativePath);
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    throw new Error('文件不存在');
+  }
+
+  if (!isPreviewableProjectFile(filePath)) {
+    throw new Error('当前文件暂不支持预览');
+  }
+
+  const maxLines = 240;
+  const maxChars = 20000;
+  const buffer = fs.readFileSync(filePath);
+  if (buffer.includes(0)) {
+    throw new Error('当前文件看起来不是文本文件');
+  }
+
+  const content = buffer.toString('utf8');
+  const clipped = content.slice(0, maxChars);
+  const lines = clipped.split(/\r?\n/).slice(0, maxLines);
+
+  return {
+    name: path.basename(filePath),
+    relativePath,
+    truncated: content.length > clipped.length || content.split(/\r?\n/).length > lines.length,
+    text: lines.join('\n'),
+  };
+}
+
+function resolveProjectRoot(session) {
+  const workdir = path.resolve(String(session?.workdir || '').trim() || config.webWorkdir);
+  if (!fs.existsSync(workdir) || !fs.statSync(workdir).isDirectory()) {
+    throw new Error('当前会话工作目录不存在');
+  }
+  return workdir;
+}
+
+function normalizeProjectRelativePath(value) {
+  return String(value || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+/g, '/')
+    .replace(/^\.$/, '')
+    .trim();
+}
+
+function resolveProjectChildPath(rootDir, relativePath) {
+  const targetPath = path.resolve(rootDir, relativePath || '.');
+  if (!isSubPath(rootDir, targetPath)) {
+    throw new Error('请求路径超出项目目录');
+  }
+  return targetPath;
+}
+
+function isPreviewableProjectFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (guessArtifactKind(filePath) === 'text') {
+    return true;
+  }
+
+  return [
+    '.swift',
+    '.m',
+    '.mm',
+    '.h',
+    '.c',
+    '.cc',
+    '.cpp',
+    '.hpp',
+    '.js',
+    '.jsx',
+    '.ts',
+    '.tsx',
+    '.mjs',
+    '.cjs',
+    '.css',
+    '.scss',
+    '.sass',
+    '.less',
+    '.java',
+    '.kt',
+    '.kts',
+    '.go',
+    '.rs',
+    '.py',
+    '.rb',
+    '.php',
+    '.sh',
+    '.bash',
+    '.zsh',
+    '.ps1',
+    '.toml',
+    '.ini',
+    '.cfg',
+    '.conf',
+    '.env',
+    '.plist',
+    '.pbxproj',
+    '.xcconfig',
+    '.yml',
+    '.yaml',
+    '.xml',
+  ].includes(ext);
 }
 
 function sanitizeMessagesForDisplay(messages) {
