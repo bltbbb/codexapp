@@ -9,10 +9,10 @@ struct SessionDetailView: View {
   @Environment(\.openURL) private var openURL
   @StateObject private var model: SessionDetailViewModel
   @FocusState private var isComposerFocused: Bool
-  @State private var selectedTab = "messages"
   @State private var selectedPhotoItems: [PhotosPickerItem] = []
   @State private var showingFileImporter = false
   @State private var previewTarget: PreviewTarget?
+  @State private var activePanel: SessionPanel?
 
   init(sessionId: String) {
     _model = StateObject(wrappedValue: SessionDetailViewModel(sessionId: sessionId))
@@ -23,22 +23,11 @@ struct SessionDetailView: View {
       header
 
       Divider()
-      Picker("详情页签", selection: $selectedTab) {
-        Text("消息").tag("messages")
-        Text("事件").tag("events")
-        Text("产物").tag("artifacts")
-      }
-      .pickerStyle(.segmented)
-      .padding(.horizontal, 16)
-      .padding(.top, 12)
-
-      contentView
+      messageList
     }
     .safeAreaInset(edge: .bottom) {
-      if selectedTab == "messages" {
-        composer
-          .background(.ultraThinMaterial)
-      }
+      composer
+        .background(.ultraThinMaterial)
     }
     .navigationTitle(model.session?.title ?? "会话")
     .navigationBarTitleDisplayMode(.inline)
@@ -81,26 +70,30 @@ struct SessionDetailView: View {
       ArtifactPreviewSheet(target: target)
         .environmentObject(settings)
     }
-  }
-
-  @ViewBuilder
-  private var contentView: some View {
-    if selectedTab == "events" {
-      eventList
-    } else if selectedTab == "artifacts" {
-      artifactList
-    } else {
-      messageList
+    .sheet(item: $activePanel) { panel in
+      NavigationStack {
+        Group {
+          if panel == .events {
+            eventList
+          } else {
+            artifactList
+          }
+        }
+        .navigationTitle(panel.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+          ToolbarItem(placement: .topBarLeading) {
+            Button("关闭") {
+              activePanel = nil
+            }
+          }
+        }
+      }
     }
   }
 
   private var header: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text(model.session?.preview.isEmpty == false ? model.session?.preview ?? "" : "会话已连接到远端 Codex 服务")
-        .font(.subheadline)
-        .foregroundColor(.secondary)
-        .lineLimit(2)
-
+    VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: 10) {
         Label(streamText, systemImage: streamIcon)
           .font(.caption.weight(.semibold))
@@ -120,6 +113,26 @@ struct SessionDetailView: View {
         }
 
         Spacer()
+
+        Button {
+          activePanel = .events
+        } label: {
+          Image(systemName: "list.bullet.rectangle")
+            .font(.system(size: 18, weight: .semibold))
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(.secondary)
+        .accessibilityLabel("查看事件")
+
+        Button {
+          activePanel = .artifacts
+        } label: {
+          Image(systemName: "shippingbox")
+            .font(.system(size: 18, weight: .semibold))
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(.secondary)
+        .accessibilityLabel("查看产物")
       }
     }
     .padding(.horizontal, 16)
@@ -216,7 +229,7 @@ struct SessionDetailView: View {
     }
     .fileImporter(
       isPresented: $showingFileImporter,
-      allowedContentTypes: [.item],
+      allowedContentTypes: supportedImportContentTypes,
       allowsMultipleSelection: true
     ) { result in
       switch result {
@@ -260,6 +273,25 @@ struct SessionDetailView: View {
     }
   }
 
+  private var supportedImportContentTypes: [UTType] {
+    [
+      .content,
+      .data,
+      .plainText,
+      .text,
+      .utf8PlainText,
+      .json,
+      .xml,
+      .commaSeparatedText,
+      .pdf,
+      .archive,
+      .zip,
+      .image,
+      .movie,
+      .audio
+    ]
+  }
+
   private var messageList: some View {
     ScrollViewReader { proxy in
       ScrollView {
@@ -269,6 +301,7 @@ struct SessionDetailView: View {
               message: message,
               iconName: iconName(for:),
               formatBytes: formatBytes(_:),
+              imageURL: messageAttachmentImageURL(_:),
               openAttachment: openMessageAttachment(_:),
               formatTime: formatDisplayTime(_:)
             )
@@ -352,7 +385,7 @@ struct SessionDetailView: View {
       } else {
         ForEach(model.session?.artifacts ?? []) { artifact in
           Button {
-            openArtifact(artifact)
+            openArtifactFromPanel(artifact)
           } label: {
             HStack(spacing: 12) {
               Image(systemName: iconName(for: artifact.kind))
@@ -456,6 +489,13 @@ struct SessionDetailView: View {
     )
   }
 
+  private func openArtifactFromPanel(_ artifact: CodexArtifact) {
+    activePanel = nil
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+      openArtifact(artifact)
+    }
+  }
+
   private func openMessageAttachment(_ attachment: CodexMessageAttachment) {
     openPreview(
       PreviewTarget(
@@ -468,7 +508,7 @@ struct SessionDetailView: View {
   }
 
   private func openPreview(_ target: PreviewTarget) {
-    if target.kind == "image" || target.kind == "text" {
+    if target.isImage || target.isText {
       previewTarget = target
       return
     }
@@ -480,6 +520,33 @@ struct SessionDetailView: View {
     } catch {
       model.errorMessage = error.localizedDescription
     }
+  }
+
+  private func messageAttachmentImageURL(_ attachment: CodexMessageAttachment) -> URL? {
+    guard isImageAttachment(attachment.kind, mimeType: attachment.mimeType, name: attachment.name) else {
+      return nil
+    }
+
+    do {
+      let api = try settings.makeAPI()
+      return try api.makeArtifactURL(artifactId: attachment.id)
+    } catch {
+      return nil
+    }
+  }
+
+  private func isImageAttachment(_ kind: String?, mimeType: String?, name: String) -> Bool {
+    if kind == "image" {
+      return true
+    }
+
+    if mimeType?.hasPrefix("image/") == true {
+      return true
+    }
+
+    let normalizedName = name.lowercased()
+    return [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".heic", ".heif"]
+      .contains { normalizedName.hasSuffix($0) }
   }
 
   private func formatBytes(_ value: Int) -> String {
@@ -566,11 +633,55 @@ struct SessionDetailView: View {
   }
 }
 
+private enum SessionPanel: String, Identifiable {
+  case events
+  case artifacts
+
+  var id: String { rawValue }
+
+  var title: String {
+    switch self {
+    case .events:
+      return "事件"
+    case .artifacts:
+      return "产物"
+    }
+  }
+}
+
 private struct PreviewTarget: Identifiable {
   let id: String
   let name: String
   let kind: String?
   let mimeType: String?
+
+  var isImage: Bool {
+    if kind == "image" {
+      return true
+    }
+
+    if mimeType?.hasPrefix("image/") == true {
+      return true
+    }
+
+    let normalizedName = name.lowercased()
+    return [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".heic", ".heif"]
+      .contains { normalizedName.hasSuffix($0) }
+  }
+
+  var isText: Bool {
+    if kind == "text" {
+      return true
+    }
+
+    if mimeType?.hasPrefix("text/") == true {
+      return true
+    }
+
+    let normalizedName = name.lowercased()
+    return [".md", ".txt", ".log", ".json", ".yml", ".yaml", ".xml", ".csv", ".js", ".ts", ".swift", ".py"]
+      .contains { normalizedName.hasSuffix($0) }
+  }
 }
 
 private struct ArtifactPreviewSheet: View {
@@ -587,9 +698,9 @@ private struct ArtifactPreviewSheet: View {
   var body: some View {
     NavigationStack {
       Group {
-        if target.kind == "image" {
+        if target.isImage {
           imagePreview
-        } else if target.kind == "text" {
+        } else if target.isText {
           textPreviewView
         } else {
           UnavailableStateView(
@@ -689,13 +800,13 @@ private struct ArtifactPreviewSheet: View {
 
     do {
       let api = try settings.makeAPI()
-      if target.kind == "image" {
+      if target.isImage {
         imageURL = try api.makeArtifactURL(artifactId: target.id)
         previewError = ""
         return
       }
 
-      if target.kind == "text" {
+      if target.isText {
         textPreview = try await api.fetchArtifactTextPreview(artifactId: target.id)
         previewError = ""
       }
@@ -709,6 +820,7 @@ private struct MessageBubble: View {
   let message: CodexMessage
   let iconName: (String?) -> String
   let formatBytes: (Int) -> String
+  let imageURL: (CodexMessageAttachment) -> URL?
   let openAttachment: (CodexMessageAttachment) -> Void
   let formatTime: (String) -> String
 
@@ -735,9 +847,27 @@ private struct MessageBubble: View {
       )
         .frame(maxWidth: .infinity, alignment: .leading)
 
-      if !message.attachments.isEmpty {
+      if !imageAttachments.isEmpty {
+        VStack(alignment: .leading, spacing: 8) {
+          ForEach(imageAttachments) { attachment in
+            Button {
+              openAttachment(attachment)
+            } label: {
+              MessageImageThumbnail(
+                attachment: attachment,
+                imageURL: imageURL(attachment),
+                metaText: formatBytes(attachment.size ?? 0),
+                isAssistant: message.role == "assistant"
+              )
+            }
+            .buttonStyle(.plain)
+          }
+        }
+      }
+
+      if !nonImageAttachments.isEmpty {
         VStack(alignment: .leading, spacing: 6) {
-          ForEach(message.attachments) { attachment in
+          ForEach(nonImageAttachments) { attachment in
             Button {
               openAttachment(attachment)
             } label: {
@@ -804,6 +934,108 @@ private struct MessageBubble: View {
 
   private var attachmentBackgroundColor: Color {
     message.role == "assistant" ? Color(.tertiarySystemBackground) : Color.white.opacity(0.14)
+  }
+
+  private var imageAttachments: [CodexMessageAttachment] {
+    message.attachments.filter { attachment in
+      if attachment.kind == "image" {
+        return true
+      }
+      if attachment.mimeType?.hasPrefix("image/") == true {
+        return true
+      }
+
+      let normalizedName = attachment.name.lowercased()
+      return [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg", ".heic", ".heif"]
+        .contains { normalizedName.hasSuffix($0) }
+    }
+  }
+
+  private var nonImageAttachments: [CodexMessageAttachment] {
+    message.attachments.filter { attachment in
+      !imageAttachments.contains(attachment)
+    }
+  }
+}
+
+private struct MessageImageThumbnail: View {
+  let attachment: CodexMessageAttachment
+  let imageURL: URL?
+  let metaText: String
+  let isAssistant: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      ZStack {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .fill(thumbnailBackground)
+
+        if let imageURL {
+          AsyncImage(url: imageURL) { phase in
+            switch phase {
+            case let .success(image):
+              image
+                .resizable()
+                .scaledToFill()
+            case .failure:
+              fallbackContent(systemImage: "photo", text: "图片加载失败")
+            default:
+              ProgressView()
+                .tint(progressTint)
+            }
+          }
+        } else {
+          fallbackContent(systemImage: "photo", text: "图片不可用")
+        }
+      }
+      .frame(width: 220, height: 156)
+      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .stroke(borderColor, lineWidth: 1)
+      )
+
+      VStack(alignment: .leading, spacing: 2) {
+        Text(attachment.name)
+          .font(.caption.weight(.semibold))
+          .foregroundColor(textColor)
+          .lineLimit(1)
+        Text(metaText)
+          .font(.caption2)
+          .foregroundColor(metaColor)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func fallbackContent(systemImage: String, text: String) -> some View {
+    VStack(spacing: 8) {
+      Image(systemName: systemImage)
+        .font(.title2)
+      Text(text)
+        .font(.caption)
+    }
+    .foregroundColor(metaColor)
+  }
+
+  private var thumbnailBackground: Color {
+    isAssistant ? Color(.tertiarySystemBackground) : Color.white.opacity(0.14)
+  }
+
+  private var borderColor: Color {
+    isAssistant ? Color.black.opacity(0.06) : Color.white.opacity(0.18)
+  }
+
+  private var textColor: Color {
+    isAssistant ? .primary : .white
+  }
+
+  private var metaColor: Color {
+    isAssistant ? .secondary : .white.opacity(0.72)
+  }
+
+  private var progressTint: Color {
+    isAssistant ? .secondary : .white
   }
 }
 
