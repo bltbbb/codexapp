@@ -37,7 +37,7 @@ struct SessionDetailView: View {
     .safeAreaInset(edge: .bottom) {
       if selectedTab == "messages" {
         composer
-          .background(Color(uiColor: .systemBackground).opacity(0.96))
+          .background(.ultraThinMaterial)
       }
     }
     .navigationTitle(model.session?.title ?? "会话")
@@ -105,14 +105,17 @@ struct SessionDetailView: View {
         Label(streamText, systemImage: streamIcon)
           .font(.caption.weight(.semibold))
           .foregroundColor(streamColor)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 5)
+          .background(streamColor.opacity(0.15), in: Capsule())
 
         Text(statusText)
-          .font(.caption)
+          .font(.caption.weight(.medium))
           .foregroundColor(.secondary)
 
         if model.streamState == "reconnecting" {
           Text("第 \(max(model.reconnectAttempt, 1)) 次重连")
-            .font(.caption2)
+            .font(.caption2.weight(.medium))
             .foregroundColor(.secondary)
         }
 
@@ -121,8 +124,8 @@ struct SessionDetailView: View {
     }
     .padding(.horizontal, 16)
     .padding(.top, 14)
-    .padding(.bottom, 12)
-    .background(Color(uiColor: .secondarySystemBackground))
+    .padding(.bottom, 14)
+    .background(.regularMaterial)
   }
 
   private var composer: some View {
@@ -764,9 +767,26 @@ private struct MessageBubble: View {
         .font(.caption2)
         .foregroundColor(metaColor)
     }
-    .padding(12)
-    .background(bubbleBackgroundColor)
-    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    .padding(14)
+    .background(
+      Group {
+        if message.role == "assistant" {
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(Color(uiColor: .secondarySystemGroupedBackground))
+            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+        } else {
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(
+              LinearGradient(
+                colors: [Color.orange, Color.orange.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+              )
+            )
+            .shadow(color: Color.orange.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+      }
+    )
     .textSelection(.enabled)
   }
 
@@ -784,10 +804,6 @@ private struct MessageBubble: View {
 
   private var attachmentBackgroundColor: Color {
     message.role == "assistant" ? Color(.tertiarySystemBackground) : Color.white.opacity(0.14)
-  }
-
-  private var bubbleBackgroundColor: Color {
-    message.role == "assistant" ? Color(.secondarySystemBackground) : .orange
   }
 }
 

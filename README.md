@@ -55,6 +55,18 @@ OPENAI_BASE_URL=你的接口根地址
 OPENAI_MODEL=gpt-5.4
 ```
 
+## Web 管理端
+
+仓库里新增了独立目录 [codex-web-console](h:/project_public/my-codex/telegram-codex-bot/codex-web-console/README.md#L1)，用于手机端管理 Codex 会话。
+
+启动方式：
+
+```powershell
+npm run start:web
+```
+
+默认监听 `127.0.0.1:4631`，建议配合 `WEB_CODEX_TOKEN` 使用，再通过局域网或 Tailscale 访问。
+
 ## 推荐配置
 
 默认配置：

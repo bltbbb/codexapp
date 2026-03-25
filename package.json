@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node index.mjs"
+    "start": "node index.mjs",
+    "start:web": "node codex-web-console/server.mjs",
+    "start:web:resume": "node codex-web-resume-console/server.mjs"
   },
   "dependencies": {
-    "node-pty": "^1.1.0-beta34"
+    "node-pty": "^1.1.0-beta34",
+    "vant": "^4.9.22",
+    "vue": "^3.5.30"
   }
 }

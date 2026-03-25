@@ -24,17 +24,34 @@ struct RootView: View {
           ProgressView("正在加载会话…")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-          List(sessions) { session in
-            NavigationLink(value: session.id) {
-              SessionRow(session: session)
+          ScrollView {
+            LazyVStack(spacing: 16) {
+              ForEach(sessions) { session in
+                NavigationLink(value: session.id) {
+                  SessionRow(session: session)
+                }
+                .buttonStyle(.plain)
+              }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
           }
-          .listStyle(.insetGrouped)
           .refreshable {
             await refreshSessions()
           }
         }
       }
+      .background(
+        LinearGradient(
+          colors: [
+            Color(uiColor: .systemGroupedBackground),
+            Color(uiColor: .secondarySystemGroupedBackground)
+          ],
+          startPoint: .topLeading,
+          endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+      )
       .navigationTitle("Codex 会话台")
       .navigationDestination(for: String.self) { sessionId in
         SessionDetailView(sessionId: sessionId)
@@ -136,28 +153,46 @@ private struct SessionRow: View {
   let session: CodexSessionSummary
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 10) {
-        Text(session.title.isEmpty ? "未命名会话" : session.title)
-          .font(.headline)
-          .lineLimit(1)
+    VStack(alignment: .leading, spacing: 14) {
+      HStack(spacing: 12) {
+        Image(systemName: "terminal.fill")
+          .font(.system(size: 18, weight: .bold))
+          .foregroundColor(.orange)
+          .frame(width: 44, height: 44)
+          .background(Color.orange.opacity(0.12))
+          .clipShape(Circle())
+        
+        VStack(alignment: .leading, spacing: 4) {
+          Text(session.title.isEmpty ? "未命名会话" : session.title)
+            .font(.headline.weight(.semibold))
+            .foregroundColor(.primary)
+            .lineLimit(1)
+            
+          Text(DisplayTime.text(session.updatedAt))
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .lineLimit(1)
+        }
         Spacer()
+        
         Text(statusText)
-          .font(.caption.weight(.semibold))
+          .font(.caption2.weight(.bold))
           .foregroundColor(statusColor)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 5)
+          .background(statusColor.opacity(0.15), in: Capsule())
       }
 
       Text(session.preview.isEmpty ? "暂无摘要" : session.preview)
         .font(.subheadline)
         .foregroundColor(.secondary)
         .lineLimit(2)
-
-      Text(DisplayTime.text(session.updatedAt))
-        .font(.caption)
-        .foregroundColor(Color(uiColor: .tertiaryLabel))
-        .lineLimit(1)
+        .multilineTextAlignment(.leading)
     }
-    .padding(.vertical, 4)
+    .padding(16)
+    .background(Color(uiColor: .secondarySystemGroupedBackground))
+    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
   }
 
   private var statusText: String {
