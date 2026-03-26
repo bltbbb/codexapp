@@ -192,92 +192,74 @@ struct SessionDetailView: View {
         }
       }
 
-      VStack(spacing: 12) {
-        ZStack(alignment: .leading) {
-          if model.draftMessage.isEmpty {
-            Text("Type a message for AI")
-              .font(.system(size: 20, weight: .medium))
-              .foregroundColor(.secondary.opacity(0.8))
-              .padding(.horizontal, 28)
-              .padding(.vertical, 20)
-          }
-
-          TextEditor(text: $model.draftMessage)
-            .focused($isComposerFocused)
-            .font(.system(size: 20, weight: .medium))
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .scrollContentBackground(.hidden)
-            .frame(minHeight: 66, maxHeight: 148)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .background(Color.clear)
+      ZStack(alignment: .leading) {
+        if model.draftMessage.isEmpty {
+          Text("Type a message for AI")
+            .font(.system(size: 16))
+            .foregroundColor(.secondary.opacity(0.8))
+            .padding(.leading, 20)
         }
-        .background(Color.white.opacity(0.95))
-        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .shadow(color: Color.black.opacity(0.06), radius: 20, x: 0, y: 10)
 
-        HStack(spacing: 14) {
-          PhotosPicker(
-            selection: $selectedPhotoItems,
-            maxSelectionCount: 3,
-            matching: .images
-          ) {
-            composerToolIcon("photo")
-          }
-          .buttonStyle(.plain)
-
-          Button {
-            showingFileImporter = true
-          } label: {
-            composerToolIcon("plus")
-          }
-          .buttonStyle(.plain)
-
-          Spacer(minLength: 0)
-
-          Button {
+        TextField("", text: $model.draftMessage)
+          .focused($isComposerFocused)
+          .font(.system(size: 16))
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+          .submitLabel(.send)
+          .onSubmit {
             sendMessage()
-          } label: {
-            ZStack {
-              Circle()
-                .fill(sendButtonBackground)
-                .frame(width: 58, height: 58)
+          }
+          .padding(.horizontal, 20)
+      }
+      .frame(height: 56)
+      .background(Color.white.opacity(0.95))
+      .clipShape(Capsule())
+      .shadow(color: Color.black.opacity(0.06), radius: 20, x: 0, y: 10)
 
-              if model.isSending {
-                ProgressView()
-                  .tint(sendButtonForeground)
-              } else {
-                Image(systemName: "arrow.up")
-                  .font(.system(size: 24, weight: .medium))
-                  .foregroundColor(sendButtonForeground)
-              }
+      HStack(spacing: 14) {
+        PhotosPicker(
+          selection: $selectedPhotoItems,
+          maxSelectionCount: 3,
+          matching: .images
+        ) {
+          composerToolIcon("photo")
+        }
+        .buttonStyle(.plain)
+
+        Button {
+          showingFileImporter = true
+        } label: {
+          composerToolIcon("plus")
+        }
+        .buttonStyle(.plain)
+
+        Spacer(minLength: 0)
+
+        Button {
+          sendMessage()
+        } label: {
+          ZStack {
+            Circle()
+              .fill(sendButtonBackground)
+              .frame(width: 58, height: 58)
+
+            if model.isSending {
+              ProgressView()
+                .tint(sendButtonForeground)
+            } else {
+              Image(systemName: "arrow.up")
+                .font(.system(size: 24, weight: .medium))
+                .foregroundColor(sendButtonForeground)
             }
           }
-          .buttonStyle(.plain)
-          .disabled(sendButtonDisabled)
         }
+        .buttonStyle(.plain)
+        .disabled(sendButtonDisabled)
       }
-      .padding(.horizontal, 16)
-      .padding(.top, 16)
-      .padding(.bottom, 12)
-      .background(Color.white.opacity(0.78))
-      .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
-      .shadow(color: Color.black.opacity(0.08), radius: 24, x: 0, y: 10)
     }
     .padding(.horizontal, 16)
     .padding(.top, 10)
     .padding(.bottom, 12)
-    .background(
-      LinearGradient(
-        colors: [
-          Color.white.opacity(0.94),
-          Color(uiColor: .systemGray6),
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-    )
     .onChange(of: selectedPhotoItems) { newItems in
       let captured = newItems
       selectedPhotoItems = []
