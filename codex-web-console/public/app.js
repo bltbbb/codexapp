@@ -711,6 +711,9 @@ createApp({
       return [
         `状态：${this.statusText(this.currentSession.status)}`,
         this.currentSession.codexThreadId ? `Thread：${this.currentSession.codexThreadId}` : '',
+        this.currentSession.model ? `模型：${this.currentSession.model}` : '',
+        this.currentSession.reasoningEffort ? `推理：${this.currentSession.reasoningEffort}` : '',
+        this.formatContextUsage(this.currentSession.tokenUsage),
         this.currentSession.workdir ? `目录：${this.currentSession.workdir}` : '',
       ].filter(Boolean).join('  |  ');
     },
@@ -1444,6 +1447,9 @@ createApp({
       if (event.type === 'status') {
         this.currentSession.status = this.inferStatusFromEvent(event.payload?.text, this.currentSession.status);
         this.currentSession.canStop = this.currentSession.status === 'running';
+        if (event.payload?.model) {
+          this.currentSession.model = event.payload.model;
+        }
       }
 
       if (event.type === 'message' && event.payload?.text) {
@@ -1615,6 +1621,35 @@ createApp({
       if (kind === 'archive') return '压缩包';
       if (kind === 'document') return '文档';
       return '文件';
+    },
+
+    formatContextUsage(tokenUsage) {
+      if (!tokenUsage || typeof tokenUsage !== 'object') {
+        return '';
+      }
+
+      const contextTokens = Number(tokenUsage.contextTokens ?? tokenUsage.total?.totalTokens ?? 0);
+      const contextWindow = Number(tokenUsage.modelContextWindow ?? 0);
+      const remainingTokens = Number(tokenUsage.remainingTokens ?? 0);
+      const lastTurnTokens = Number(tokenUsage.last?.totalTokens ?? 0);
+      const percent = Number.isFinite(Number(tokenUsage.contextUsagePercent))
+        ? Number(tokenUsage.contextUsagePercent)
+        : (contextWindow > 0 ? (contextTokens / contextWindow) * 100 : NaN);
+
+      const parts = [];
+      if (contextTokens > 0 && contextWindow > 0) {
+        parts.push(`上下文：${this.formatNumber(contextTokens)} / ${this.formatNumber(contextWindow)}（${this.formatPercent(percent)}）`);
+      } else if (contextTokens > 0) {
+        parts.push(`累计：${this.formatNumber(contextTokens)}`);
+      }
+      if (remainingTokens > 0) {
+        parts.push(`剩余：${this.formatNumber(remainingTokens)}`);
+      }
+      if (lastTurnTokens > 0) {
+        parts.push(`本轮：${this.formatNumber(lastTurnTokens)}`);
+      }
+
+      return parts.join(' · ');
     },
 
     fileUrl(artifactId) {
@@ -1981,6 +2016,19 @@ createApp({
       if (size < 1024) return `${size} B`;
       if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
       return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    },
+
+    formatNumber(value) {
+      const normalized = Number(value || 0);
+      return new Intl.NumberFormat('zh-CN').format(normalized);
+    },
+
+    formatPercent(value) {
+      const normalized = Number(value);
+      if (!Number.isFinite(normalized)) {
+        return '0.0%';
+      }
+      return `${normalized >= 100 ? normalized.toFixed(0) : normalized.toFixed(1)}%`;
     },
   },
 }).use(vant).mount('#app');

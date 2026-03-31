@@ -188,6 +188,10 @@ final class SessionDetailViewModel: ObservableObject {
       session.canStop = session.status == "running"
     }
 
+    if let eventModel = event.payload.model, !eventModel.isEmpty {
+      session.model = eventModel
+    }
+
     if event.type == "message", let text = event.payload.text, !text.isEmpty {
       var messages = session.messages
       let exists = messages.contains(where: { $0.role == "assistant" && $0.text == text && $0.createdAt == event.timestamp })

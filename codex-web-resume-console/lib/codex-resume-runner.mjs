@@ -198,6 +198,17 @@ export class CodexResumeRunner {
         this.trySyncDesktopSession(run.sessionId, run.threadId);
       }
 
+      if (summary.model) {
+        this.sessionStore.updateSession(run.sessionId, {
+          model: summary.model,
+          status: 'running',
+          currentRun: {
+            id: run.id,
+            startedAt: run.startedAt,
+          },
+        });
+      }
+
       if (summary.reply) {
         run.lastAgentMessage = summary.reply;
         this.publishAssistantReply(run, summary.reply, {
@@ -210,6 +221,7 @@ export class CodexResumeRunner {
         this.publishEvent(run.sessionId, 'status', {
           text: summary.status,
           runId: run.id,
+          model: summary.model || '',
         });
       }
 
@@ -474,6 +486,7 @@ function summarizeExecJsonEvent(event) {
 
   if (event.model) {
     return {
+      model: String(event.model || '').trim(),
       status: `已连接 Codex（${event.model}）`,
     };
   }

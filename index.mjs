@@ -58,6 +58,7 @@ const state = {
   mode: 'ask',
   codeSession: loadSavedCodeSession(),
   lastSessionChoices: [],
+  lastAskUsage: null,
 };
 
 const helpText = [
@@ -295,6 +296,7 @@ function loadSavedCodeSession() {
       codexThreadId: String(data.codexThreadId || '').trim(),
       startedAt: String(data.startedAt || new Date().toISOString()),
       workdir: String(data.workdir || config.codexWorkdir),
+      model: String(data.model || '').trim(),
       ready: true,
       pending: null,
       lastOutputAt: String(data.lastOutputAt || ''),
@@ -302,6 +304,7 @@ function loadSavedCodeSession() {
       lastReplyAt: String(data.lastReplyAt || ''),
       lastError: String(data.lastError || ''),
       lastApprovalPrompt: '',
+      tokenUsage: normalizeCodeSessionTokenUsage(data.tokenUsage),
       turns: Array.isArray(data.turns)
         ? data.turns
             .map((item) => ({
@@ -335,10 +338,12 @@ function saveCodeSessionState(session = state.codeSession) {
           codexThreadId: session.codexThreadId || '',
           startedAt: session.startedAt,
           workdir: session.workdir,
+          model: session.model || '',
           lastOutputAt: session.lastOutputAt,
           lastReply: session.lastReply,
           lastReplyAt: session.lastReplyAt,
           lastError: session.lastError,
+          tokenUsage: normalizeCodeSessionTokenUsage(session.tokenUsage),
           turns: Array.isArray(session.turns) ? session.turns : [],
         },
         null,
@@ -445,7 +450,9 @@ function parseCodexSessionFile(filePath) {
     let id = '';
     let cwd = '';
     let timestamp = '';
+    let model = '';
     let preview = '';
+    let tokenUsage = null;
 
     for (const line of lines) {
       let entry;
@@ -459,6 +466,19 @@ function parseCodexSessionFile(filePath) {
         id = String(entry.payload?.id || '').trim() || id;
         cwd = String(entry.payload?.cwd || '').trim() || cwd;
         timestamp = String(entry.payload?.timestamp || entry.timestamp || '').trim() || timestamp;
+        continue;
+      }
+
+      if (entry.type === 'turn_context') {
+        model = String(entry.payload?.model || '').trim() || model;
+        continue;
+      }
+
+      if (entry.type === 'event_msg' && entry.payload?.type === 'token_count') {
+        const usage = normalizeCodeSessionTokenUsage(entry.payload?.info, entry.timestamp);
+        if (usage) {
+          tokenUsage = usage;
+        }
         continue;
       }
 
@@ -481,7 +501,9 @@ function parseCodexSessionFile(filePath) {
       id,
       cwd: cwd || config.codexWorkdir,
       timestamp,
+      model,
       preview,
+      tokenUsage,
       filePath,
     };
   } catch {
@@ -673,6 +695,7 @@ async function handleUseSessionCommand(chatId, selector) {
     codexThreadId: targetId,
     startedAt: meta?.timestamp || new Date().toISOString(),
     workdir: cwd,
+    model: meta?.model || '',
     ready: true,
     pending: null,
     lastOutputAt: '',
@@ -680,6 +703,7 @@ async function handleUseSessionCommand(chatId, selector) {
     lastReplyAt: '',
     lastError: '',
     lastApprovalPrompt: '',
+    tokenUsage: normalizeCodeSessionTokenUsage(meta?.tokenUsage),
     turns: [],
   };
   state.mode = 'code';
@@ -802,7 +826,8 @@ function buildStatusText() {
     `Codex CLI：${resolveCodexCommand()}`,
     `Codex 沙箱：${config.codexSandbox || '继承本机配置'}`,
     `Codex 审批：${config.codexBypassApprovals ? '完全跳过' : '按 CLI 默认配置'}`,
-    `Ask 模型：${config.askModel}`,
+    `Ask 当前模型：${state.lastAskUsage?.model || config.askModel}`,
+    `Ask 最近 Token：${formatTokenBucketSummary(state.lastAskUsage)}`,
     `Telegram 轮询：${config.telegramUseShortPoll ? '短轮询' : '长轮询'}`,
   ];
 
@@ -846,10 +871,17 @@ function appendCodeSessionStatus(lines, withTaskDetails) {
     return;
   }
 
+  refreshCodeSessionRuntimeState(session);
+
   lines.push(`持续 code 会话：${session.ready ? '已就绪' : '初始化中'}`);
   lines.push('会话类型：TG + Codex exec/resume');
   lines.push(`本地会话 ID：${session.id}`);
   lines.push(`Codex Thread：${session.codexThreadId || '尚未创建'}`);
+  lines.push(`当前模型：${session.model || config.codexModel || config.askModel}`);
+  lines.push(`上下文 Token：${formatCodeSessionWindowSummary(session.tokenUsage)}`);
+  if (session.tokenUsage?.last) {
+    lines.push(`最近一轮 Token：${formatTokenBucketSummary(session.tokenUsage.last)}`);
+  }
   lines.push(`会话启动时间：${session.startedAt}`);
   lines.push(`会话轮次：${Math.ceil((session.turns?.length || 0) / 2)}`);
   lines.push(`最近输出时间：${session.lastOutputAt || '暂无'}`);
@@ -918,6 +950,8 @@ async function askModel(prompt) {
     timeoutSec: 90,
   });
 
+  state.lastAskUsage = extractAskUsage(data);
+
   const text = extractResponseText(data).trim();
   if (!text) {
     throw new Error('ask 模式没有返回可读文本。');
@@ -940,6 +974,7 @@ async function ensureCodeSession(options = {}) {
     codexThreadId: '',
     startedAt: new Date().toISOString(),
     workdir: config.codexWorkdir,
+    model: config.codexModel || '',
     ready: true,
     pending: null,
     lastOutputAt: '',
@@ -947,6 +982,7 @@ async function ensureCodeSession(options = {}) {
     lastReplyAt: '',
     lastError: '',
     lastApprovalPrompt: '',
+    tokenUsage: null,
     turns: [],
   };
 
@@ -1320,6 +1356,7 @@ async function runCodeSessionTurn(session, pending) {
   }
   appendCodeSessionTurn(session, 'user', pending.prompt);
   appendCodeSessionTurn(session, 'assistant', normalizedReply);
+  refreshCodeSessionRuntimeState(session);
   session.lastReply = normalizedReply;
   session.lastReplyAt = new Date().toISOString();
   session.lastError = '';
@@ -1465,6 +1502,12 @@ function handleExecJsonStdout(session, pending, chunk) {
       continue;
     }
 
+    if (summary.model) {
+      session.model = summary.model;
+    }
+    if (summary.tokenUsage) {
+      session.tokenUsage = summary.tokenUsage;
+    }
     if (summary.threadId) {
       pending.threadId = summary.threadId;
     }
@@ -1489,8 +1532,19 @@ function summarizeExecJsonEvent(event) {
 
   if (event.model) {
     return {
+      model: String(event.model || '').trim(),
       status: `已连接 Codex（${event.model}）`,
       force: true,
+    };
+  }
+
+  if (event.type === 'token_count') {
+    const tokenUsage = normalizeCodeSessionTokenUsage(event.info, event.timestamp);
+    if (!tokenUsage) {
+      return null;
+    }
+    return {
+      tokenUsage,
     };
   }
 
@@ -2708,6 +2762,170 @@ function extractResponseText(data) {
     }
   }
   return texts.join('\n').trim();
+}
+
+function extractAskUsage(data) {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const usage = data.usage;
+  if (!usage || typeof usage !== 'object') {
+    return null;
+  }
+
+  const normalized = normalizeTokenBucket({
+    inputTokens: usage.input_tokens ?? usage.inputTokens,
+    cachedInputTokens:
+      usage.input_tokens_details?.cached_tokens ??
+      usage.inputTokensDetails?.cachedTokens ??
+      usage.cached_input_tokens ??
+      usage.cachedInputTokens,
+    outputTokens: usage.output_tokens ?? usage.outputTokens,
+    reasoningOutputTokens:
+      usage.output_tokens_details?.reasoning_tokens ??
+      usage.outputTokensDetails?.reasoningTokens ??
+      usage.reasoning_output_tokens ??
+      usage.reasoningOutputTokens,
+    totalTokens: usage.total_tokens ?? usage.totalTokens,
+  });
+
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    ...normalized,
+    model: String(data.model || config.askModel).trim() || config.askModel,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeCodeSessionTokenUsage(value, updatedAt = '') {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const total = normalizeTokenBucket(value.total_token_usage || value.totalTokenUsage || value.total);
+  const last = normalizeTokenBucket(value.last_token_usage || value.lastTokenUsage || value.last);
+  const modelContextWindow = toNumber(value.model_context_window ?? value.modelContextWindow, null);
+  const normalizedUpdatedAt = String(value.updatedAt || updatedAt || '').trim();
+
+  if (!total && !last && modelContextWindow == null) {
+    return null;
+  }
+
+  return {
+    total,
+    last,
+    modelContextWindow,
+    updatedAt: normalizedUpdatedAt,
+  };
+}
+
+function normalizeTokenBucket(value) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const inputTokens = toNumber(value.input_tokens ?? value.inputTokens, null);
+  const cachedInputTokens = toNumber(value.cached_input_tokens ?? value.cachedInputTokens, null);
+  const outputTokens = toNumber(value.output_tokens ?? value.outputTokens, null);
+  const reasoningOutputTokens = toNumber(value.reasoning_output_tokens ?? value.reasoningOutputTokens, null);
+  const totalTokens = toNumber(value.total_tokens ?? value.totalTokens, null);
+
+  if (
+    inputTokens == null &&
+    cachedInputTokens == null &&
+    outputTokens == null &&
+    reasoningOutputTokens == null &&
+    totalTokens == null
+  ) {
+    return null;
+  }
+
+  return {
+    inputTokens,
+    cachedInputTokens,
+    outputTokens,
+    reasoningOutputTokens,
+    totalTokens,
+  };
+}
+
+function refreshCodeSessionRuntimeState(session) {
+  if (!session?.codexThreadId) {
+    return;
+  }
+
+  const meta = findCodexSessionById(session.codexThreadId);
+  if (!meta) {
+    return;
+  }
+
+  if (meta.model) {
+    session.model = meta.model;
+  }
+  if (meta.tokenUsage) {
+    session.tokenUsage = meta.tokenUsage;
+  }
+}
+
+function formatCodeSessionWindowSummary(tokenUsage) {
+  const normalized = normalizeCodeSessionTokenUsage(tokenUsage);
+  const total = normalized?.total;
+  if (total?.totalTokens == null) {
+    return normalized?.modelContextWindow ? `上下文窗口 ${formatTokenNumber(normalized.modelContextWindow)}，暂无累计值` : '暂无';
+  }
+
+  if (normalized?.modelContextWindow) {
+    const windowSize = normalized.modelContextWindow;
+    const used = total.totalTokens;
+    const remaining = Math.max(0, windowSize - used);
+    const percent = windowSize > 0 ? ((used / windowSize) * 100).toFixed(1) : '0.0';
+    return `${formatTokenNumber(used)} / ${formatTokenNumber(windowSize)}（${percent}% 已用，剩余 ${formatTokenNumber(remaining)}）`;
+  }
+
+  return formatTokenBucketSummary(total);
+}
+
+function formatTokenBucketSummary(bucket) {
+  const normalized = normalizeTokenBucket(bucket);
+  if (!normalized) {
+    return '暂无';
+  }
+
+  const parts = [];
+  if (normalized.totalTokens != null) {
+    parts.push(`总计 ${formatTokenNumber(normalized.totalTokens)}`);
+  }
+
+  const details = [];
+  if (normalized.inputTokens != null) {
+    details.push(`输入 ${formatTokenNumber(normalized.inputTokens)}`);
+  }
+  if (normalized.cachedInputTokens != null) {
+    details.push(`缓存 ${formatTokenNumber(normalized.cachedInputTokens)}`);
+  }
+  if (normalized.outputTokens != null) {
+    details.push(`输出 ${formatTokenNumber(normalized.outputTokens)}`);
+  }
+  if (normalized.reasoningOutputTokens != null) {
+    details.push(`推理 ${formatTokenNumber(normalized.reasoningOutputTokens)}`);
+  }
+
+  if (!parts.length && details.length) {
+    return details.join('，');
+  }
+  if (!details.length) {
+    return parts.join('');
+  }
+  return `${parts.join('')}（${details.join('，')}）`;
+}
+
+function formatTokenNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed.toLocaleString('zh-CN') : '0';
 }
 
 async function runCommand(command, args, options = {}) {

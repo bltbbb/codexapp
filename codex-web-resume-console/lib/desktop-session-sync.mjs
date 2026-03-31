@@ -71,6 +71,7 @@ function buildThreadRecord(config, input) {
     memoryMode: 'enabled',
     model: String(native.model || config.codexModel || '').trim(),
     reasoningEffort: String(native.reasoningEffort || '').trim(),
+    tokensUsed: Number(native.tokenUsage?.contextTokens || native.tokenUsage?.total?.totalTokens || 0),
   };
 }
 
@@ -176,7 +177,7 @@ function upsertThreadState(config, record) {
       ${sqlLiteral(record.title)},
       ${sqlLiteral(record.sandboxPolicy)},
       ${sqlLiteral(record.approvalMode)},
-      0,
+      ${Number(record.tokensUsed || 0)},
       1,
       0,
       ${sqlLiteral(record.cliVersion)},
@@ -194,6 +195,7 @@ function upsertThreadState(config, record) {
       title = excluded.title,
       sandbox_policy = excluded.sandbox_policy,
       approval_mode = excluded.approval_mode,
+      tokens_used = excluded.tokens_used,
       has_user_event = 1,
       cli_version = excluded.cli_version,
       first_user_message = excluded.first_user_message,

@@ -75,6 +75,9 @@ export class SessionStore {
       lastError: String(input.lastError || ''),
       lastReply: String(input.lastReply || ''),
       preview: String(input.preview || ''),
+      model: String(input.model || ''),
+      reasoningEffort: String(input.reasoningEffort || ''),
+      tokenUsage: input.tokenUsage,
       messages: Array.isArray(input.messages) ? input.messages : [],
       events: Array.isArray(input.events) ? input.events : [],
       artifacts: Array.isArray(input.artifacts) ? input.artifacts : [],
@@ -94,6 +97,7 @@ export class SessionStore {
       }
       existing.codexThreadId = existing.codexThreadId || meta.id;
       existing.workdir = existing.workdir || meta.cwd || '';
+      applyImportedRuntimeState(existing, meta);
       if (meta.preview) {
         existing.preview = meta.preview;
       }
@@ -125,6 +129,9 @@ export class SessionStore {
       codexThreadId: meta.id,
       status: 'idle',
       preview: meta.preview || '',
+      model: meta.model || '',
+      reasoningEffort: meta.reasoningEffort || '',
+      tokenUsage: meta.tokenUsage || null,
       messages: Array.isArray(transcript.messages) ? transcript.messages : [],
     });
   }
@@ -251,6 +258,9 @@ function normalizeSession(raw) {
     lastError: String(raw?.lastError || ''),
     lastReply: String(raw?.lastReply || ''),
     preview: String(raw?.preview || ''),
+    model: String(raw?.model || '').trim(),
+    reasoningEffort: String(raw?.reasoningEffort || '').trim(),
+    tokenUsage: normalizeTokenUsage(raw?.tokenUsage),
     messages: normalizeMessages(raw?.messages),
     events: normalizeEvents(raw?.events),
     artifacts: normalizeArtifacts(raw?.artifacts),
@@ -333,6 +343,96 @@ function normalizeStatus(status) {
     return status;
   }
   return 'idle';
+}
+
+function applyImportedRuntimeState(session, meta) {
+  if (!session || !meta) {
+    return;
+  }
+
+  if (meta.model) {
+    session.model = String(meta.model).trim();
+  }
+
+  if (meta.reasoningEffort) {
+    session.reasoningEffort = String(meta.reasoningEffort).trim();
+  }
+
+  if (meta.tokenUsage && typeof meta.tokenUsage === 'object') {
+    session.tokenUsage = normalizeTokenUsage(meta.tokenUsage);
+  }
+}
+
+function normalizeTokenUsage(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const modelContextWindow = normalizeOptionalNumber(raw.modelContextWindow);
+  const contextTokens = normalizeOptionalNumber(raw.contextTokens);
+  const remainingTokens = normalizeOptionalNumber(raw.remainingTokens);
+  const contextUsagePercent = normalizeOptionalFloat(raw.contextUsagePercent);
+  const total = normalizeTokenBreakdown(raw.total);
+  const last = normalizeTokenBreakdown(raw.last);
+
+  if (
+    !String(raw.updatedAt || '').trim()
+    && modelContextWindow == null
+    && contextTokens == null
+    && remainingTokens == null
+    && contextUsagePercent == null
+    && !total
+    && !last
+  ) {
+    return null;
+  }
+
+  return {
+    updatedAt: String(raw.updatedAt || '').trim(),
+    modelContextWindow,
+    contextTokens,
+    remainingTokens,
+    contextUsagePercent,
+    total,
+    last,
+  };
+}
+
+function normalizeTokenBreakdown(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const normalized = {
+    inputTokens: normalizeRequiredNumber(raw.inputTokens),
+    cachedInputTokens: normalizeRequiredNumber(raw.cachedInputTokens),
+    outputTokens: normalizeRequiredNumber(raw.outputTokens),
+    reasoningOutputTokens: normalizeRequiredNumber(raw.reasoningOutputTokens),
+    totalTokens: normalizeRequiredNumber(raw.totalTokens),
+  };
+
+  return Object.values(normalized).some((value) => value > 0) ? normalized : null;
+}
+
+function normalizeOptionalNumber(value) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0) {
+    return null;
+  }
+  return Math.floor(normalized);
+}
+
+function normalizeOptionalFloat(value) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0) {
+    return null;
+  }
+  return Math.round(normalized * 10) / 10;
+}
+
+function normalizeRequiredNumber(value) {
+  const normalized = normalizeOptionalNumber(value);
+  return normalized == null ? 0 : normalized;
 }
 
 function shouldRefreshImportedMessages(session, transcript) {

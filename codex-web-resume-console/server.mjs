@@ -677,6 +677,9 @@ function buildLocalSessionSummary(session) {
     codexThreadId: session.codexThreadId,
     hasLocalState: true,
     lastError: session.lastError,
+    model: String(session.model || '').trim(),
+    reasoningEffort: String(session.reasoningEffort || '').trim(),
+    tokenUsage: session.tokenUsage || null,
   };
 }
 
@@ -1166,6 +1169,24 @@ function syncSessionDerivedFields(session, native, transcript) {
     changed = true;
   }
 
+  const nextModel = String(native?.model || session.model || '').trim();
+  if (nextModel !== String(session.model || '').trim()) {
+    session.model = nextModel;
+    changed = true;
+  }
+
+  const nextReasoningEffort = String(native?.reasoningEffort || session.reasoningEffort || '').trim();
+  if (nextReasoningEffort !== String(session.reasoningEffort || '').trim()) {
+    session.reasoningEffort = nextReasoningEffort;
+    changed = true;
+  }
+
+  const nextTokenUsageSerialized = JSON.stringify(native?.tokenUsage || null);
+  if (nextTokenUsageSerialized !== JSON.stringify(session.tokenUsage || null)) {
+    session.tokenUsage = native?.tokenUsage || null;
+    changed = true;
+  }
+
   if (
     (session.title === '新会话' || session.title === '历史会话')
     && Array.isArray(transcript?.messages)
@@ -1207,6 +1228,9 @@ function serializeSessionSummary(session) {
     codexThreadId: session.codexThreadId,
     hasLocalState: true,
     lastError: session.lastError,
+    model: String(session.model || '').trim(),
+    reasoningEffort: String(session.reasoningEffort || '').trim(),
+    tokenUsage: session.tokenUsage || null,
   };
 }
 

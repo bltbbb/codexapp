@@ -147,6 +147,18 @@ struct SessionDetailView: View {
         .foregroundColor(.secondary)
         .accessibilityLabel("查看项目树")
       }
+
+      if !sessionRuntimeLines.isEmpty {
+        VStack(alignment: .leading, spacing: 4) {
+          ForEach(sessionRuntimeLines, id: \.self) { line in
+            Text(line)
+              .font(.caption2)
+              .foregroundColor(.secondary)
+              .lineLimit(2)
+          }
+        }
+        .padding(.top, 10)
+      }
     }
     .padding(.horizontal, 16)
     .padding(.top, 14)
@@ -517,6 +529,56 @@ struct SessionDetailView: View {
     }
   }
 
+  private var sessionRuntimeLines: [String] {
+    guard let session = model.session else {
+      return []
+    }
+
+    var lines: [String] = []
+    let modelName = (session.model ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let reasoningEffort = (session.reasoningEffort ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+    let modelLine = [
+      modelName.isEmpty ? "" : "模型：\(modelName)",
+      reasoningEffort.isEmpty ? "" : "推理：\(reasoningEffort)"
+    ]
+      .filter { !$0.isEmpty }
+      .joined(separator: " · ")
+    if !modelLine.isEmpty {
+      lines.append(modelLine)
+    }
+
+    if let tokenLine = tokenUsageLine(session.tokenUsage) {
+      lines.append(tokenLine)
+    }
+
+    return lines
+  }
+
+  private func tokenUsageLine(_ tokenUsage: CodexTokenUsage?) -> String? {
+    guard let tokenUsage else {
+      return nil
+    }
+
+    var parts: [String] = []
+    if let contextTokens = tokenUsage.contextTokens, let contextWindow = tokenUsage.modelContextWindow, contextWindow > 0 {
+      let percentText = formatPercent(tokenUsage.contextUsagePercent ?? (Double(contextTokens) / Double(contextWindow) * 100))
+      parts.append("上下文：\(formatNumber(contextTokens)) / \(formatNumber(contextWindow))（\(percentText)）")
+    } else if let totalTokens = tokenUsage.total?.totalTokens, totalTokens > 0 {
+      parts.append("累计：\(formatNumber(totalTokens))")
+    }
+
+    if let remainingTokens = tokenUsage.remainingTokens {
+      parts.append("剩余：\(formatNumber(remainingTokens))")
+    }
+
+    if let lastTurnTokens = tokenUsage.last?.totalTokens, lastTurnTokens > 0 {
+      parts.append("本轮：\(formatNumber(lastTurnTokens))")
+    }
+
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
+
   private func iconName(for kind: String?) -> String {
     switch kind {
     case "image":
@@ -678,6 +740,19 @@ struct SessionDetailView: View {
 
   private func formatDisplayTime(_ rawValue: String?) -> String {
     DisplayTime.text(rawValue)
+  }
+
+  private func formatNumber(_ value: Int) -> String {
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .decimal
+    return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+  }
+
+  private func formatPercent(_ value: Double) -> String {
+    if value >= 100 {
+      return String(format: "%.0f%%", value)
+    }
+    return String(format: "%.1f%%", value)
   }
 
   private func sendMessage() {

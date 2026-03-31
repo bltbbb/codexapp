@@ -107,6 +107,24 @@ struct SendMessageRequest: Encodable {
   let attachments: [AttachmentUploadPayload]
 }
 
+struct CodexTokenUsageBreakdown: Decodable, Hashable {
+  let inputTokens: Int
+  let cachedInputTokens: Int
+  let outputTokens: Int
+  let reasoningOutputTokens: Int
+  let totalTokens: Int
+}
+
+struct CodexTokenUsage: Decodable, Hashable {
+  let updatedAt: String?
+  let modelContextWindow: Int?
+  let contextTokens: Int?
+  let remainingTokens: Int?
+  let contextUsagePercent: Double?
+  let total: CodexTokenUsageBreakdown?
+  let last: CodexTokenUsageBreakdown?
+}
+
 struct CodexSessionSummary: Decodable, Identifiable, Hashable {
   let id: String
   let title: String
@@ -119,6 +137,9 @@ struct CodexSessionSummary: Decodable, Identifiable, Hashable {
   let workdir: String?
   let codexThreadId: String?
   let lastError: String?
+  let model: String?
+  let reasoningEffort: String?
+  let tokenUsage: CodexTokenUsage?
 }
 
 struct CodexSession: Decodable, Identifiable, Hashable {
@@ -132,6 +153,9 @@ struct CodexSession: Decodable, Identifiable, Hashable {
   let lastActivityAt: String?
   let workdir: String?
   let codexThreadId: String?
+  var model: String?
+  var reasoningEffort: String?
+  var tokenUsage: CodexTokenUsage?
   var lastError: String?
   var lastReply: String?
   var messages: [CodexMessage]
@@ -179,6 +203,7 @@ struct CodexEventPayload: Decodable, Hashable {
   let text: String?
   let message: String?
   let status: String?
+  let model: String?
   let sessionId: String?
   let runId: String?
   let artifact: CodexArtifact?

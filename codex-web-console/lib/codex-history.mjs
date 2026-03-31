@@ -180,6 +180,9 @@ function parseCodexSessionFile(filePath, fileInfo = null) {
     let source = '';
     let modelProvider = '';
     let cliVersion = '';
+    let model = '';
+    let reasoningEffort = '';
+    let tokenUsage = null;
 
     for (const line of lines) {
       let entry;
@@ -196,6 +199,20 @@ function parseCodexSessionFile(filePath, fileInfo = null) {
         source = String(entry.payload?.source || '').trim() || source;
         modelProvider = String(entry.payload?.model_provider || '').trim() || modelProvider;
         cliVersion = String(entry.payload?.cli_version || '').trim() || cliVersion;
+        continue;
+      }
+
+      if (entry.type === 'turn_context') {
+        model = String(entry.payload?.model || '').trim() || model;
+        reasoningEffort = String(entry.payload?.effort || '').trim() || reasoningEffort;
+        continue;
+      }
+
+      if (entry.type === 'event_msg' && entry.payload?.type === 'token_count') {
+        const normalizedTokenUsage = normalizeTokenUsageInfo(entry.payload?.info, entry.timestamp);
+        if (normalizedTokenUsage) {
+          tokenUsage = normalizedTokenUsage;
+        }
         continue;
       }
 
@@ -231,6 +248,9 @@ function parseCodexSessionFile(filePath, fileInfo = null) {
       source,
       modelProvider,
       cliVersion,
+      model,
+      reasoningEffort,
+      tokenUsage,
     };
     sessionMetaCache.set(filePath, { cacheKey, value });
     return value;
@@ -243,6 +263,70 @@ function buildFileCacheKey(filePath, stat) {
   const mtimeMs = Number(stat?.mtimeMs || 0);
   const size = Number(stat?.size || 0);
   return `${filePath}:${mtimeMs}:${size}`;
+}
+
+function normalizeTokenUsageInfo(info, timestamp = '') {
+  if (!info || typeof info !== 'object') {
+    return null;
+  }
+
+  const total = normalizeTokenBreakdown(info.total_token_usage);
+  const last = normalizeTokenBreakdown(info.last_token_usage);
+  const modelContextWindow = toSafeInteger(info.model_context_window);
+  const contextTokens = total?.totalTokens ?? 0;
+  const remainingTokens = modelContextWindow > 0
+    ? Math.max(modelContextWindow - contextTokens, 0)
+    : null;
+  const contextUsagePercent = modelContextWindow > 0
+    ? roundToSingleDecimal((contextTokens / modelContextWindow) * 100)
+    : null;
+
+  if (!total && !last && !modelContextWindow) {
+    return null;
+  }
+
+  return {
+    updatedAt: String(timestamp || '').trim(),
+    modelContextWindow: modelContextWindow || null,
+    contextTokens: contextTokens || 0,
+    remainingTokens,
+    contextUsagePercent,
+    total,
+    last,
+  };
+}
+
+function normalizeTokenBreakdown(input) {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+
+  const normalized = {
+    inputTokens: toSafeInteger(input.input_tokens),
+    cachedInputTokens: toSafeInteger(input.cached_input_tokens),
+    outputTokens: toSafeInteger(input.output_tokens),
+    reasoningOutputTokens: toSafeInteger(input.reasoning_output_tokens),
+    totalTokens: toSafeInteger(input.total_tokens),
+  };
+
+  const hasValue = Object.values(normalized).some((value) => value > 0);
+  return hasValue ? normalized : null;
+}
+
+function toSafeInteger(value) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0) {
+    return 0;
+  }
+  return Math.floor(normalized);
+}
+
+function roundToSingleDecimal(value) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0) {
+    return null;
+  }
+  return Math.round(normalized * 10) / 10;
 }
 
 function shouldUseLatestPreview(candidateTimestamp, currentTimestamp) {
