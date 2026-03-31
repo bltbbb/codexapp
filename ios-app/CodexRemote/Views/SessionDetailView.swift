@@ -148,16 +148,12 @@ struct SessionDetailView: View {
         .accessibilityLabel("查看项目树")
       }
 
-      if !sessionRuntimeLines.isEmpty {
-        VStack(alignment: .leading, spacing: 4) {
-          ForEach(sessionRuntimeLines, id: \.self) { line in
-            Text(line)
-              .font(.caption2)
-              .foregroundColor(.secondary)
-              .lineLimit(2)
-          }
-        }
-        .padding(.top, 10)
+      if !sessionRuntimeText.isEmpty {
+        Text(sessionRuntimeText)
+          .font(.caption2)
+          .foregroundColor(.secondary)
+          .lineLimit(2)
+          .padding(.top, 10)
       }
     }
     .padding(.horizontal, 16)
@@ -529,54 +525,54 @@ struct SessionDetailView: View {
     }
   }
 
-  private var sessionRuntimeLines: [String] {
+  private var sessionRuntimeText: String {
     guard let session = model.session else {
-      return []
+      return ""
     }
 
-    var lines: [String] = []
-    let modelName = (session.model ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    let reasoningEffort = (session.reasoningEffort ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-
-    let modelLine = [
-      modelName.isEmpty ? "" : "模型：\(modelName)",
-      reasoningEffort.isEmpty ? "" : "推理：\(reasoningEffort)"
+    let parts = [
+      compactModelText(session),
+      compactTokenText(session.tokenUsage)
     ]
+      .compactMap { $0 }
       .filter { !$0.isEmpty }
-      .joined(separator: " · ")
-    if !modelLine.isEmpty {
-      lines.append(modelLine)
-    }
 
-    if let tokenLine = tokenUsageLine(session.tokenUsage) {
-      lines.append(tokenLine)
-    }
-
-    return lines
+    return parts.joined(separator: " · ")
   }
 
-  private func tokenUsageLine(_ tokenUsage: CodexTokenUsage?) -> String? {
+  private func compactModelText(_ session: CodexSession) -> String? {
+    let modelName = (session.model ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    if modelName.isEmpty {
+      return nil
+    }
+
+    let reasoningEffort = (session.reasoningEffort ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    if reasoningEffort.isEmpty {
+      return modelName
+    }
+
+    return "\(modelName) / \(reasoningEffort)"
+  }
+
+  private func compactTokenText(_ tokenUsage: CodexTokenUsage?) -> String? {
     guard let tokenUsage else {
       return nil
     }
 
-    var parts: [String] = []
-    if let contextTokens = tokenUsage.contextTokens, let contextWindow = tokenUsage.modelContextWindow, contextWindow > 0 {
-      let percentText = formatPercent(tokenUsage.contextUsagePercent ?? (Double(contextTokens) / Double(contextWindow) * 100))
-      parts.append("上下文：\(formatNumber(contextTokens)) / \(formatNumber(contextWindow))（\(percentText)）")
-    } else if let totalTokens = tokenUsage.total?.totalTokens, totalTokens > 0 {
-      parts.append("累计：\(formatNumber(totalTokens))")
-    }
-
-    if let remainingTokens = tokenUsage.remainingTokens {
-      parts.append("剩余：\(formatNumber(remainingTokens))")
+    if let lastTurnTokens = tokenUsage.last?.totalTokens,
+       let contextWindow = tokenUsage.modelContextWindow,
+       lastTurnTokens > 0,
+       contextWindow > 0
+    {
+      let percentText = formatPercent(Double(lastTurnTokens) / Double(contextWindow) * 100)
+      return "\(formatNumber(lastTurnTokens)) / \(formatNumber(contextWindow))（\(percentText)）"
     }
 
     if let lastTurnTokens = tokenUsage.last?.totalTokens, lastTurnTokens > 0 {
-      parts.append("本轮：\(formatNumber(lastTurnTokens))")
+      return formatNumber(lastTurnTokens)
     }
 
-    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    return nil
   }
 
   private func iconName(for kind: String?) -> String {

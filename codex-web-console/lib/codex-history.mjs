@@ -272,23 +272,29 @@ function normalizeTokenUsageInfo(info, timestamp = '') {
 
   const total = normalizeTokenBreakdown(info.total_token_usage);
   const last = normalizeTokenBreakdown(info.last_token_usage);
-  const modelContextWindow = toSafeInteger(info.model_context_window);
-  const contextTokens = total?.totalTokens ?? 0;
-  const remainingTokens = modelContextWindow > 0
-    ? Math.max(modelContextWindow - contextTokens, 0)
-    : null;
-  const contextUsagePercent = modelContextWindow > 0
+  const modelContextWindow = toNullableInteger(info.model_context_window);
+  const contextTokens = toNullableInteger(
+    info.context_tokens
+    ?? info.current_context_tokens
+    ?? info.current_context_token_count,
+  );
+  const remainingTokens = toNullableInteger(
+    info.remaining_tokens
+    ?? info.remaining_context_tokens
+    ?? info.remaining_context_token_count,
+  );
+  const contextUsagePercent = contextTokens != null && modelContextWindow
     ? roundToSingleDecimal((contextTokens / modelContextWindow) * 100)
-    : null;
+    : toNullableFloat(info.context_usage_percent);
 
-  if (!total && !last && !modelContextWindow) {
+  if (!total && !last && !modelContextWindow && contextTokens == null && remainingTokens == null && contextUsagePercent == null) {
     return null;
   }
 
   return {
     updatedAt: String(timestamp || '').trim(),
-    modelContextWindow: modelContextWindow || null,
-    contextTokens: contextTokens || 0,
+    modelContextWindow,
+    contextTokens,
     remainingTokens,
     contextUsagePercent,
     total,
@@ -321,12 +327,28 @@ function toSafeInteger(value) {
   return Math.floor(normalized);
 }
 
+function toNullableInteger(value) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0) {
+    return null;
+  }
+  return Math.floor(normalized);
+}
+
 function roundToSingleDecimal(value) {
   const normalized = Number(value);
   if (!Number.isFinite(normalized) || normalized < 0) {
     return null;
   }
   return Math.round(normalized * 10) / 10;
+}
+
+function toNullableFloat(value) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0) {
+    return null;
+  }
+  return normalized;
 }
 
 function shouldUseLatestPreview(candidateTimestamp, currentTimestamp) {

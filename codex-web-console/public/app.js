@@ -1628,21 +1628,27 @@ createApp({
         return '';
       }
 
-      const contextTokens = Number(tokenUsage.contextTokens ?? tokenUsage.total?.totalTokens ?? 0);
+      const contextTokens = Number(tokenUsage.contextTokens ?? 0);
       const contextWindow = Number(tokenUsage.modelContextWindow ?? 0);
       const remainingTokens = Number(tokenUsage.remainingTokens ?? 0);
+      const cumulativeTokens = Number(tokenUsage.total?.totalTokens ?? 0);
       const lastTurnTokens = Number(tokenUsage.last?.totalTokens ?? 0);
       const percent = Number.isFinite(Number(tokenUsage.contextUsagePercent))
         ? Number(tokenUsage.contextUsagePercent)
         : (contextWindow > 0 ? (contextTokens / contextWindow) * 100 : NaN);
 
       const parts = [];
-      if (contextTokens > 0 && contextWindow > 0) {
+      if (contextTokens > 0 && contextWindow > 0 && contextTokens <= contextWindow) {
         parts.push(`上下文：${this.formatNumber(contextTokens)} / ${this.formatNumber(contextWindow)}（${this.formatPercent(percent)}）`);
-      } else if (contextTokens > 0) {
-        parts.push(`累计：${this.formatNumber(contextTokens)}`);
+      } else {
+        if (contextWindow > 0) {
+          parts.push(`窗口：${this.formatNumber(contextWindow)}`);
+        }
       }
-      if (remainingTokens > 0) {
+      if (cumulativeTokens > 0) {
+        parts.push(`累计：${this.formatNumber(cumulativeTokens)}`);
+      }
+      if (remainingTokens > 0 && contextWindow > 0 && contextTokens <= contextWindow) {
         parts.push(`剩余：${this.formatNumber(remainingTokens)}`);
       }
       if (lastTurnTokens > 0) {

@@ -2809,9 +2809,12 @@ function normalizeCodeSessionTokenUsage(value, updatedAt = '') {
   const total = normalizeTokenBucket(value.total_token_usage || value.totalTokenUsage || value.total);
   const last = normalizeTokenBucket(value.last_token_usage || value.lastTokenUsage || value.last);
   const modelContextWindow = toNumber(value.model_context_window ?? value.modelContextWindow, null);
+  const contextTokens = toNumber(value.context_tokens ?? value.contextTokens, null);
+  const remainingTokens = toNumber(value.remaining_tokens ?? value.remainingTokens, null);
+  const contextUsagePercent = toNumber(value.context_usage_percent ?? value.contextUsagePercent, null);
   const normalizedUpdatedAt = String(value.updatedAt || updatedAt || '').trim();
 
-  if (!total && !last && modelContextWindow == null) {
+  if (!total && !last && modelContextWindow == null && contextTokens == null && remainingTokens == null && contextUsagePercent == null) {
     return null;
   }
 
@@ -2819,6 +2822,9 @@ function normalizeCodeSessionTokenUsage(value, updatedAt = '') {
     total,
     last,
     modelContextWindow,
+    contextTokens,
+    remainingTokens,
+    contextUsagePercent,
     updatedAt: normalizedUpdatedAt,
   };
 }
@@ -2874,19 +2880,35 @@ function refreshCodeSessionRuntimeState(session) {
 function formatCodeSessionWindowSummary(tokenUsage) {
   const normalized = normalizeCodeSessionTokenUsage(tokenUsage);
   const total = normalized?.total;
-  if (total?.totalTokens == null) {
-    return normalized?.modelContextWindow ? `上下文窗口 ${formatTokenNumber(normalized.modelContextWindow)}，暂无累计值` : '暂无';
-  }
+  const hasContextUsage = (
+    normalized?.contextTokens != null &&
+    normalized?.modelContextWindow != null &&
+    normalized.contextTokens <= normalized.modelContextWindow
+  );
 
-  if (normalized?.modelContextWindow) {
+  if (hasContextUsage) {
+    const used = normalized.contextTokens;
     const windowSize = normalized.modelContextWindow;
-    const used = total.totalTokens;
-    const remaining = Math.max(0, windowSize - used);
-    const percent = windowSize > 0 ? ((used / windowSize) * 100).toFixed(1) : '0.0';
+    const remaining = normalized.remainingTokens != null
+      ? normalized.remainingTokens
+      : Math.max(0, windowSize - used);
+    const percent = normalized.contextUsagePercent != null
+      ? normalized.contextUsagePercent.toFixed(1)
+      : ((used / windowSize) * 100).toFixed(1);
     return `${formatTokenNumber(used)} / ${formatTokenNumber(windowSize)}（${percent}% 已用，剩余 ${formatTokenNumber(remaining)}）`;
   }
 
-  return formatTokenBucketSummary(total);
+  const parts = [];
+  if (normalized?.modelContextWindow != null) {
+    parts.push(`窗口 ${formatTokenNumber(normalized.modelContextWindow)}`);
+  }
+  if (total?.totalTokens != null) {
+    parts.push(`累计 ${formatTokenNumber(total.totalTokens)}`);
+  }
+  if (normalized?.last?.totalTokens != null) {
+    parts.push(`本轮 ${formatTokenNumber(normalized.last.totalTokens)}`);
+  }
+  return parts.length ? parts.join('，') : '暂无';
 }
 
 function formatTokenBucketSummary(bucket) {

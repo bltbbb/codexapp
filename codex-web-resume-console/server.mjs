@@ -679,7 +679,7 @@ function buildLocalSessionSummary(session) {
     lastError: session.lastError,
     model: String(session.model || '').trim(),
     reasoningEffort: String(session.reasoningEffort || '').trim(),
-    tokenUsage: session.tokenUsage || null,
+    tokenUsage: buildDisplayTokenUsage(session),
   };
 }
 
@@ -1188,6 +1188,18 @@ function syncSessionDerivedFields(session, native, transcript) {
   }
 
   if (
+    session?.source === 'web'
+    && session.tokenUsageBaselineTotal == null
+    && native?.filePath
+  ) {
+    const baselineTotal = findTokenUsageBaselineTotalBefore(native.filePath, session.createdAt || session.updatedAt || '');
+    if (baselineTotal != null) {
+      session.tokenUsageBaselineTotal = baselineTotal;
+      changed = true;
+    }
+  }
+
+  if (
     (session.title === '新会话' || session.title === '历史会话')
     && Array.isArray(transcript?.messages)
   ) {
@@ -1230,8 +1242,68 @@ function serializeSessionSummary(session) {
     lastError: session.lastError,
     model: String(session.model || '').trim(),
     reasoningEffort: String(session.reasoningEffort || '').trim(),
-    tokenUsage: session.tokenUsage || null,
+    tokenUsage: buildDisplayTokenUsage(session),
   };
+}
+
+function buildDisplayTokenUsage(session) {
+  const raw = session?.tokenUsage;
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const total = raw.total && typeof raw.total === 'object'
+    ? { ...raw.total }
+    : null;
+
+  const baselineTotal = Number(session?.tokenUsageBaselineTotal);
+  if (total && Number.isFinite(baselineTotal) && baselineTotal >= 0) {
+    total.totalTokens = Math.max(0, Number(total.totalTokens || 0) - baselineTotal);
+  }
+
+  return {
+    ...raw,
+    total,
+  };
+}
+
+function findTokenUsageBaselineTotalBefore(filePath, referenceIso) {
+  const referenceTime = new Date(referenceIso || '').getTime();
+  if (!Number.isFinite(referenceTime) || !fs.existsSync(filePath)) {
+    return 0;
+  }
+
+  let baselineTotal = 0;
+  try {
+    const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/).filter(Boolean);
+    for (const line of lines) {
+      let entry;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      if (entry?.type !== 'event_msg' || entry?.payload?.type !== 'token_count') {
+        continue;
+      }
+
+      const eventTime = new Date(entry.timestamp || '').getTime();
+      if (!Number.isFinite(eventTime) || eventTime >= referenceTime) {
+        continue;
+      }
+
+      const totalTokens = Number(entry.payload?.info?.total_token_usage?.total_tokens);
+      if (!Number.isFinite(totalTokens) || totalTokens < 0) {
+        continue;
+      }
+      baselineTotal = Math.floor(totalTokens);
+    }
+  } catch {
+    return 0;
+  }
+
+  return baselineTotal;
 }
 
 function serializeSessionDetail(session, options = {}) {
